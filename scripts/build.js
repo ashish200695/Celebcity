@@ -454,7 +454,11 @@ async function generateSocialImages(posts) {
 
 // ---------- HTML rendering ----------
 
-function layout({ title, description, body, canonicalPath, prefix }) {
+const SITE_URL = "https://celebcity.in";
+
+function layout({ title, description, body, canonicalPath, prefix, ogImage, ogType, jsonLd }) {
+  const canonicalUrl = `${SITE_URL}${canonicalPath}`;
+  const image = ogImage || `${SITE_URL}/logo.png`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -462,8 +466,22 @@ function layout({ title, description, body, canonicalPath, prefix }) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
 <meta name="description" content="${escapeHtml(description || "")}">
-<link rel="canonical" href="https://celebcity.in${canonicalPath}">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="${canonicalUrl}">
 <link rel="stylesheet" href="${prefix}style.css">
+<link rel="icon" href="${prefix}favicon.png" type="image/png">
+<link rel="alternate" type="application/rss+xml" title="CelebCity RSS" href="${prefix}feed.xml">
+<meta property="og:site_name" content="CelebCity">
+<meta property="og:type" content="${ogType || "website"}">
+<meta property="og:title" content="${escapeHtml(title)}">
+<meta property="og:description" content="${escapeHtml(description || "")}">
+<meta property="og:url" content="${canonicalUrl}">
+<meta property="og:image" content="${escapeHtml(image)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escapeHtml(title)}">
+<meta name="twitter:description" content="${escapeHtml(description || "")}">
+<meta name="twitter:image" content="${escapeHtml(image)}">
+${jsonLd ? `<script type="application/ld+json">${jsonLd}</script>` : ""}
 </head>
 <body>
 <header class="site-header">
@@ -501,9 +519,15 @@ function formatDate(d) {
 
 function cardImage(post) {
   if (post.imageUrl) {
-    return `<img class="card-img" src="${escapeHtml(post.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`;
+    return `<img class="card-img" src="${escapeHtml(post.imageUrl)}" alt="${escapeHtml(
+      post.title
+    )}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`;
   }
   return `<div class="card-img placeholder"><span>${escapeHtml(post.category.replace("-", " "))}</span></div>`;
+}
+
+function timeTag(dateStr) {
+  return `<time datetime="${new Date(dateStr).toISOString()}">${formatDate(dateStr)}</time>`;
 }
 
 function excerptOf(post) {
@@ -517,10 +541,20 @@ function postCard(post, prefix) {
   <div class="card-body">
   <span class="tag">${post.category.replace("-", " ")}</span>
   <h2><a href="${prefix}article/${post.slug}/">${escapeHtml(post.title)}</a></h2>
-  <p class="meta">${formatDate(post.pubDate)} &middot; ${escapeHtml(post.sourceName)}</p>
+  <p class="meta">${timeTag(post.pubDate)} &middot; ${escapeHtml(post.sourceName)}</p>
   <p class="snippet">${escapeHtml(excerptOf(post))}</p>
   </div>
 </article>`;
+}
+
+function organizationJsonLd() {
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "NewsMediaOrganization",
+    name: "CelebCity",
+    url: SITE_URL,
+    logo: { "@type": "ImageObject", url: `${SITE_URL}/logo.png` },
+  });
 }
 
 function renderHome(posts) {
@@ -533,12 +567,27 @@ function renderHome(posts) {
 <section class="feed">
 ${latest.map((p) => postCard(p, prefix)).join("\n")}
 </section>`;
+  const jsonLd = JSON.stringify([
+    JSON.parse(organizationJsonLd()),
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "CelebCity",
+      url: SITE_URL,
+      potentialAction: {
+        "@type": "SearchAction",
+        target: `${SITE_URL}/?s={search_term_string}`,
+        "query-input": "required name=search_term_string",
+      },
+    },
+  ]);
   return layout({
     title: "CelebCity — Latest Bollywood Celebrity News",
     description: "Latest Bollywood celebrity news, box office updates, OTT releases, fashion and relationships.",
     body,
     canonicalPath: "/",
     prefix,
+    jsonLd,
   });
 }
 
@@ -563,24 +612,48 @@ ${filtered.length ? filtered.map((p) => postCard(p, prefix)).join("\n") : "<p>No
 
 function renderArticle(post) {
   const prefix = "../../";
+  const ogImage = post.socialImageGeneratedAt ? `${SITE_URL}/social/${post.slug}.jpg` : post.imageUrl;
   const heroImg = post.imageUrl
-    ? `<img class="hero-img" src="${escapeHtml(post.imageUrl)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">`
+    ? `<img class="hero-img" src="${escapeHtml(post.imageUrl)}" alt="${escapeHtml(
+        post.title
+      )}" referrerpolicy="no-referrer" onerror="this.remove()">`
     : "";
   const paragraphs = (post.body || []).map((p) => `<p>${escapeHtml(p)}</p>`).join("\n");
+  const canonicalUrl = `${SITE_URL}/article/${post.slug}/`;
+  const publishedIso = new Date(post.pubDate).toISOString();
   const body = `<article class="article-page">
   <span class="tag">${post.category.replace("-", " ")}</span>
   <h1>${escapeHtml(post.title)}</h1>
-  <p class="meta">${formatDate(post.pubDate)}</p>
+  <p class="meta">${timeTag(post.pubDate)}</p>
   ${heroImg}
   ${paragraphs}
   <p class="source-credit">Source: <a href="${escapeHtml(post.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(post.sourceName)}</a></p>
 </article>`;
+  const jsonLd = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    headline: post.title,
+    image: ogImage ? [ogImage] : undefined,
+    datePublished: publishedIso,
+    dateModified: publishedIso,
+    articleSection: post.category.replace("-", " "),
+    mainEntityOfPage: { "@type": "WebPage", "@id": canonicalUrl },
+    author: { "@type": "Organization", name: "CelebCity" },
+    publisher: {
+      "@type": "Organization",
+      name: "CelebCity",
+      logo: { "@type": "ImageObject", url: `${SITE_URL}/logo.png` },
+    },
+  });
   return layout({
     title: `${post.title} — CelebCity`,
     description: excerptOf(post),
     body,
     canonicalPath: `/article/${post.slug}/`,
     prefix,
+    ogImage,
+    ogType: "article",
+    jsonLd,
   });
 }
 
@@ -625,6 +698,67 @@ function writeFile(relPath, content) {
   fs.writeFileSync(full, content);
 }
 
+function buildSitemap(posts, categories) {
+  const urls = [
+    { loc: `${SITE_URL}/`, changefreq: "hourly", priority: "1.0" },
+    ...categories.map((cat) => ({ loc: `${SITE_URL}/category/${cat}/`, changefreq: "hourly", priority: "0.7" })),
+    ...posts
+      .filter((p) => p.body !== undefined)
+      .map((p) => ({
+        loc: `${SITE_URL}/article/${p.slug}/`,
+        lastmod: new Date(p.pubDate).toISOString(),
+        changefreq: "daily",
+        priority: "0.8",
+      })),
+  ];
+  const entries = urls
+    .map(
+      (u) =>
+        `  <url><loc>${escapeXml(u.loc)}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ""}<changefreq>${
+          u.changefreq
+        }</changefreq><priority>${u.priority}</priority></url>`
+    )
+    .join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>`;
+}
+
+function buildRobotsTxt() {
+  return `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`;
+}
+
+function buildRssFeed(posts) {
+  const items = posts
+    .filter((p) => p.body !== undefined)
+    .slice(0, 50)
+    .map(
+      (p) => `  <item>
+    <title>${escapeXml(p.title)}</title>
+    <link>${SITE_URL}/article/${p.slug}/</link>
+    <guid>${SITE_URL}/article/${p.slug}/</guid>
+    <pubDate>${new Date(p.pubDate).toUTCString()}</pubDate>
+    <category>${escapeXml(p.category.replace("-", " "))}</category>
+    <description>${escapeXml(excerptOf(p))}</description>
+  </item>`
+    )
+    .join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0"><channel>\n  <title>CelebCity — Latest Bollywood Celebrity News</title>\n  <link>${SITE_URL}/</link>\n  <description>Latest Bollywood celebrity news, box office updates, OTT releases, fashion and relationships.</description>\n  <language>en-in</language>\n${items}\n</channel></rss>`;
+}
+
+function buildLogoSvg(size) {
+  const fontSize = Math.round(size * 0.24);
+  return `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${size}" height="${size}" rx="${size * 0.18}" fill="#0f0f13"/>
+  <text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="${fontSize}" fill="#ff3b6b">CC</text>
+</svg>`;
+}
+
+async function generateBrandAssets() {
+  const logo = await sharp(Buffer.from(buildLogoSvg(512))).png().toBuffer();
+  writeFile("logo.png", logo);
+  const favicon = await sharp(Buffer.from(buildLogoSvg(64))).png().toBuffer();
+  writeFile("favicon.png", favicon);
+}
+
 function renderSite(posts) {
   fs.rmSync(SITE_DIR, { recursive: true, force: true });
   writeFile("style.css", STYLE_CSS);
@@ -639,6 +773,10 @@ function renderSite(posts) {
     if (post.body === undefined) continue; // skip rendering until enriched
     writeFile(`article/${post.slug}/index.html`, renderArticle(post));
   }
+
+  writeFile("sitemap.xml", buildSitemap(posts, categories));
+  writeFile("robots.txt", buildRobotsTxt());
+  writeFile("feed.xml", buildRssFeed(posts));
 
   // CNAME file for GitHub Pages custom domain.
   writeFile("CNAME", "celebcity.in");
@@ -659,6 +797,7 @@ async function main() {
 
   await enrichPosts(merged);
   renderSite(merged);
+  await generateBrandAssets();
   await generateSocialImages(merged);
   savePosts(merged);
   console.log("Site built at ./site");
