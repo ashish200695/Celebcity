@@ -8,7 +8,7 @@ const DATA_FILE = path.join(ROOT, "data", "posts.json");
 
 const IG_USER_ID = process.env.IG_USER_ID;
 const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
-const SITE_BASE_URL = process.env.SITE_BASE_URL || "https://celebcity.com";
+const SITE_BASE_URL = process.env.SITE_BASE_URL || "https://celebcity.in";
 const GRAPH_VERSION = "v21.0";
 const MAX_ATTEMPTS = 3; // how many candidate posts to try before giving up this run
 

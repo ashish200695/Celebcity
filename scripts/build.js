@@ -317,7 +317,7 @@ function layout({ title, description, body, canonicalPath, prefix }) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
 <meta name="description" content="${escapeHtml(description || "")}">
-<link rel="canonical" href="https://celebcity.example${canonicalPath}">
+<link rel="canonical" href="https://celebcity.in${canonicalPath}">
 <link rel="stylesheet" href="${prefix}style.css">
 </head>
 <body>
@@ -495,8 +495,8 @@ function renderSite(posts) {
     writeFile(`article/${post.slug}/index.html`, renderArticle(post));
   }
 
-  // CNAME file for GitHub Pages custom domain — edit this to your real domain.
-  writeFile("CNAME", "celebcity.com");
+  // CNAME file for GitHub Pages custom domain.
+  writeFile("CNAME", "celebcity.in");
 }
 
 async function main() {
