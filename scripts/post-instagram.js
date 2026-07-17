@@ -38,7 +38,7 @@ function buildCaption(post) {
 }
 
 async function graphRequest(pathSegment, params) {
-  const url = new URL(`https://graph.facebook.com/${GRAPH_VERSION}/${pathSegment}`);
+  const url = new URL(`https://graph.instagram.com/${GRAPH_VERSION}/${pathSegment}`);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
