@@ -2,6 +2,7 @@ import Parser from "rss-parser";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import sharp from "sharp";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -13,6 +14,11 @@ const ARTICLE_FETCH_LIMIT = 80; // how many posts to fetch full source pages for
 const ARTICLE_FETCH_CONCURRENCY = 6;
 const FETCH_TIMEOUT_MS = 10000;
 const MAX_PAGE_BYTES = 900000; // stop reading a source page after ~900KB
+const SOCIAL_IMAGE_LIMIT = 60; // how many recent posts get a dramatic Instagram-style graphic per run
+const SOCIAL_IMAGE_CONCURRENCY = 6;
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8MB cap on source photo download
+const SOCIAL_W = 1080;
+const SOCIAL_H = 1350;
 
 // Free RSS feeds only — no API keys required. These are direct publisher feeds
 // (not Google News' redirect-wrapped links) so we can actually fetch and
@@ -307,6 +313,145 @@ async function enrichPosts(posts) {
   });
 }
 
+// ---------- Dramatic Instagram-style graphic (photo + gradient + bold headline) ----------
+
+async function fetchImageBuffer(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok || !res.body) return null;
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+    while (received < MAX_IMAGE_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+    }
+    reader.cancel().catch(() => {});
+    return Buffer.concat(chunks);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function escapeXml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function wrapHeadline(title, fontSize, maxWidth, maxLines) {
+  const avgCharWidth = fontSize * 0.58;
+  const maxCharsPerLine = Math.max(6, Math.floor(maxWidth / avgCharWidth));
+  const words = title.toUpperCase().split(/\s+/);
+  const lines = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length > maxCharsPerLine && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+    if (lines.length === maxLines - 1 && current.length > maxCharsPerLine) {
+      break;
+    }
+  }
+  if (current) lines.push(current);
+  if (lines.length > maxLines) {
+    lines.length = maxLines;
+  }
+  const last = lines.length - 1;
+  if (words.join(" ").length > lines.join(" ").length) {
+    lines[last] = lines[last].replace(/\s*$/, "") + "…";
+  }
+  return lines;
+}
+
+function buildOverlaySvg(post) {
+  const padding = 64;
+  const maxWidth = SOCIAL_W - padding * 2;
+  const fontSize = post.title.length > 85 ? 62 : 76;
+  const lineHeight = fontSize * 1.14;
+  const lines = wrapHeadline(post.title, fontSize, maxWidth, 4);
+  const textBlockHeight = lines.length * lineHeight;
+  const baselineStart = SOCIAL_H - 110 - textBlockHeight;
+
+  const textSpans = (dx, dy, fill, opacity) =>
+    lines
+      .map(
+        (line, i) =>
+          `<tspan x="${padding + dx}" y="${baselineStart + i * lineHeight + dy}" fill="${fill}" fill-opacity="${opacity}">${escapeXml(
+            line
+          )}</tspan>`
+      )
+      .join("");
+
+  const categoryLabel = post.category.replace("-", " ").toUpperCase();
+  const badgeWidth = categoryLabel.length * 15 + 48;
+
+  return `<svg width="${SOCIAL_W}" height="${SOCIAL_H}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="42%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.92"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="${SOCIAL_W}" height="${SOCIAL_H}" fill="url(#scrim)"/>
+  <rect x="${padding}" y="56" width="${badgeWidth}" height="52" rx="10" fill="#ff3b6b"/>
+  <text x="${padding + 24}" y="90" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="24" fill="#ffffff" letter-spacing="1">${escapeXml(
+    categoryLabel
+  )}</text>
+  <text font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="${fontSize}">
+    ${textSpans(4, 4, "#000000", 0.55)}
+    ${textSpans(0, 0, "#ffffff", 1)}
+  </text>
+  <text x="${SOCIAL_W - padding}" y="${SOCIAL_H - 40}" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="26" fill="#ff3b6b" letter-spacing="2">CELEBCITY</text>
+</svg>`;
+}
+
+async function generateSocialImage(post) {
+  const raw = await fetchImageBuffer(post.imageUrl);
+  if (!raw) return null;
+  try {
+    const overlay = Buffer.from(buildOverlaySvg(post));
+    return await sharp(raw)
+      .resize(SOCIAL_W, SOCIAL_H, { fit: "cover", position: "attention" })
+      .composite([{ input: overlay, top: 0, left: 0 }])
+      .jpeg({ quality: 88 })
+      .toBuffer();
+  } catch (err) {
+    console.error(`Failed to composite social image for "${post.title}":`, err.message);
+    return null;
+  }
+}
+
+async function generateSocialImages(posts) {
+  const candidates = posts.filter((p) => p.body && p.imageUrl).slice(0, SOCIAL_IMAGE_LIMIT);
+  if (!candidates.length) return;
+  console.log(`Generating ${candidates.length} dramatic social graphics...`);
+
+  await mapWithConcurrency(candidates, SOCIAL_IMAGE_CONCURRENCY, async (post) => {
+    const jpeg = await generateSocialImage(post);
+    if (!jpeg) {
+      post.socialImageGeneratedAt = "";
+      return;
+    }
+    writeFile(`social/${post.slug}.jpg`, jpeg);
+    post.socialImageGeneratedAt = new Date().toISOString();
+  });
+}
+
 // ---------- HTML rendering ----------
 
 function layout({ title, description, body, canonicalPath, prefix }) {
@@ -513,9 +658,9 @@ async function main() {
   console.log(`Added ${Math.max(addedCount, 0)} new posts. Total: ${merged.length}`);
 
   await enrichPosts(merged);
-
-  savePosts(merged);
   renderSite(merged);
+  await generateSocialImages(merged);
+  savePosts(merged);
   console.log("Site built at ./site");
 }
 

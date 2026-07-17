@@ -52,8 +52,10 @@ async function graphRequest(pathSegment, params) {
 
 async function publishToInstagram(post) {
   const caption = buildCaption(post);
+  const socialImageUrl = `${SITE_BASE_URL}/social/${post.slug}.jpg`;
+  const imageUrl = post.socialImageGeneratedAt ? socialImageUrl : post.imageUrl;
   const created = await graphRequest(`${IG_USER_ID}/media`, {
-    image_url: post.imageUrl,
+    image_url: imageUrl,
     caption,
     access_token: IG_ACCESS_TOKEN,
   });
