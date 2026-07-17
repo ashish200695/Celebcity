@@ -309,7 +309,7 @@ async function enrichPosts(posts) {
 
 // ---------- HTML rendering ----------
 
-function layout({ title, description, body, canonicalPath }) {
+function layout({ title, description, body, canonicalPath, prefix }) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -318,18 +318,18 @@ function layout({ title, description, body, canonicalPath }) {
 <title>${title}</title>
 <meta name="description" content="${escapeHtml(description || "")}">
 <link rel="canonical" href="https://celebcity.example${canonicalPath}">
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="${prefix}style.css">
 </head>
 <body>
 <header class="site-header">
-  <a href="/" class="logo">Celeb<span>City</span></a>
+  <a href="${prefix}" class="logo">Celeb<span>City</span></a>
   <nav>
-    <a href="/category/bollywood-news/">News</a>
-    <a href="/category/box-office/">Box Office</a>
-    <a href="/category/celebrity/">Celebrity</a>
-    <a href="/category/ott-releases/">OTT</a>
-    <a href="/category/relationships/">Relationships</a>
-    <a href="/category/fashion/">Fashion</a>
+    <a href="${prefix}category/bollywood-news/">News</a>
+    <a href="${prefix}category/box-office/">Box Office</a>
+    <a href="${prefix}category/celebrity/">Celebrity</a>
+    <a href="${prefix}category/ott-releases/">OTT</a>
+    <a href="${prefix}category/relationships/">Relationships</a>
+    <a href="${prefix}category/fashion/">Fashion</a>
   </nav>
 </header>
 <main>
@@ -366,12 +366,12 @@ function excerptOf(post) {
   return first.length > 160 ? first.slice(0, 157) + "..." : first;
 }
 
-function postCard(post) {
+function postCard(post, prefix) {
   return `<article class="card">
   ${cardImage(post)}
   <div class="card-body">
   <span class="tag">${post.category.replace("-", " ")}</span>
-  <h2><a href="/article/${post.slug}/">${escapeHtml(post.title)}</a></h2>
+  <h2><a href="${prefix}article/${post.slug}/">${escapeHtml(post.title)}</a></h2>
   <p class="meta">${formatDate(post.pubDate)} &middot; ${escapeHtml(post.sourceName)}</p>
   <p class="snippet">${escapeHtml(excerptOf(post))}</p>
   </div>
@@ -379,40 +379,45 @@ function postCard(post) {
 }
 
 function renderHome(posts) {
+  const prefix = "";
   const latest = posts.slice(0, MAX_POSTS_ON_HOME);
   const body = `<section class="hero">
   <h1>Bollywood News, Updated Automatically</h1>
   <p>Latest Bollywood celebrity news, box office numbers, OTT releases and more — refreshed around the clock.</p>
 </section>
 <section class="feed">
-${latest.map(postCard).join("\n")}
+${latest.map((p) => postCard(p, prefix)).join("\n")}
 </section>`;
   return layout({
     title: "CelebCity — Latest Bollywood Celebrity News",
     description: "Latest Bollywood celebrity news, box office updates, OTT releases, fashion and relationships.",
     body,
     canonicalPath: "/",
+    prefix,
   });
 }
 
 function renderCategory(category, posts) {
+  const prefix = "../../";
   const filtered = posts.filter((p) => p.category === category).slice(0, MAX_POSTS_ON_HOME);
   const label = category.replace("-", " ");
   const body = `<section class="hero small">
   <h1>${escapeHtml(label)}</h1>
 </section>
 <section class="feed">
-${filtered.length ? filtered.map(postCard).join("\n") : "<p>No stories yet — check back soon.</p>"}
+${filtered.length ? filtered.map((p) => postCard(p, prefix)).join("\n") : "<p>No stories yet — check back soon.</p>"}
 </section>`;
   return layout({
     title: `${label} — CelebCity`,
     description: `Latest ${label} news from CelebCity.`,
     body,
     canonicalPath: `/category/${category}/`,
+    prefix,
   });
 }
 
 function renderArticle(post) {
+  const prefix = "../../";
   const heroImg = post.imageUrl
     ? `<img class="hero-img" src="${escapeHtml(post.imageUrl)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">`
     : "";
@@ -430,6 +435,7 @@ function renderArticle(post) {
     description: excerptOf(post),
     body,
     canonicalPath: `/article/${post.slug}/`,
+    prefix,
   });
 }
 
