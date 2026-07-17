@@ -1,0 +1,12 @@
+{
+  "name": "celebcity",
+  "version": "1.0.0",
+  "description": "Automated Bollywood celebrity news site - CelebCity",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.js"
+  },
+  "dependencies": {
+    "rss-parser": "^3.13.0"
+  }
+}

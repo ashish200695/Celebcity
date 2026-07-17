@@ -1,0 +1,38 @@
+name: Post latest article to Instagram
+
+on:
+  schedule:
+    # Every 2 hours — safely under Instagram's ~25 posts/24h publishing limit.
+    - cron: "0 */2 * * *"
+  workflow_dispatch: {} # lets you trigger a manual post from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Post to Instagram
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          SITE_BASE_URL: ${{ vars.SITE_BASE_URL }}
+        run: node scripts/post-instagram.js
+
+      - name: Commit posted-status update
+        run: |
+          git config user.name "celebcity-bot"
+          git config user.email "actions@github.com"
+          git add data/posts.json
+          git diff --cached --quiet || git commit -m "Mark Instagram post status $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git pull --rebase origin main
+          git push
