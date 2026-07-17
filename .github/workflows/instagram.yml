@@ -2,8 +2,8 @@ name: Post latest article to Instagram
 
 on:
   schedule:
-    # Every 2 hours — safely under Instagram's ~25 posts/24h publishing limit.
-    - cron: "0 */2 * * *"
+    # Every 2 hours, 10am-10pm IST only (04:30-16:30 UTC). Silent 12am-9am IST.
+    - cron: "30 4,6,8,10,12,14,16 * * *"
   workflow_dispatch: {} # lets you trigger a manual post from the Actions tab
 
 permissions:

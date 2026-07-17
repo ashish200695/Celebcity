@@ -114,8 +114,9 @@ Edit the `FEEDS` array near the top of `scripts/build.js` to add/remove RSS sour
 ## Scheduling
 
 - Site rebuild: every 3 hours (`.github/workflows/publish.yml`)
-- Instagram post: every 2 hours, one post per run (`.github/workflows/instagram.yml`),
-  safely under Instagram's ~25 posts/24h publishing limit.
+- Instagram post: every 2 hours, 10am-10pm IST only, silent 12am-9am IST
+  (`.github/workflows/instagram.yml`) — 7 posts/day, well under Instagram's ~25 posts/24h
+  publishing limit.
 
 GitHub Actions free tier gives public repos **unlimited** scheduled-workflow minutes.
 
