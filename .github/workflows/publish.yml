@@ -14,7 +14,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: "celebcity-git-write"
   cancel-in-progress: false
 
 jobs:
@@ -41,8 +41,11 @@ jobs:
           git config user.email "actions@github.com"
           git add data/posts.json
           git diff --cached --quiet || git commit -m "Auto-update posts $(date -u +'%Y-%m-%d %H:%M UTC')"
-          git pull --rebase origin main
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase -X ours origin main && git push && break
+            echo "Push attempt $i failed, retrying..."
+            sleep 5
+          done
 
       - name: Upload site as Pages artifact
         uses: actions/upload-pages-artifact@v3

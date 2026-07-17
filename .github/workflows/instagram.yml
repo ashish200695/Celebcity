@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: "celebcity-git-write"
+  cancel-in-progress: false
+
 jobs:
   post:
     runs-on: ubuntu-latest
@@ -34,5 +38,8 @@ jobs:
           git config user.email "actions@github.com"
           git add data/posts.json
           git diff --cached --quiet || git commit -m "Mark Instagram post status $(date -u +'%Y-%m-%d %H:%M UTC')"
-          git pull --rebase origin main
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase -X ours origin main && git push && break
+            echo "Push attempt $i failed, retrying..."
+            sleep 5
+          done
