@@ -30,7 +30,7 @@ jobs:
           node-version: "20"
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Fetch news and build site
         run: npm run build
