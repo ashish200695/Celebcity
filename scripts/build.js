@@ -1,7 +1,9 @@
 import Parser from "rss-parser";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { fileURLToPath } from "url";
+import { spawnSync } from "child_process";
 import sharp from "sharp";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,6 +21,13 @@ const SOCIAL_IMAGE_CONCURRENCY = 6;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8MB cap on source photo download
 const SOCIAL_W = 1080;
 const SOCIAL_H = 1350;
+const REEL_W = 1080;
+const REEL_H = 1920;
+const REEL_BOTTOM_SAFE_ZONE = 260; // keep text clear of Instagram's Reels UI (caption/icons overlay)
+const REEL_DURATION_SEC = 6;
+const REEL_FPS = 25;
+const REEL_LIMIT = 15; // video encoding is CPU/time heavy — keep this modest per run
+const REEL_CONCURRENCY = 2;
 
 // Free RSS feeds only — no API keys required. These are direct publisher feeds
 // (not Google News' redirect-wrapped links) so we can actually fetch and
@@ -377,14 +386,14 @@ function wrapHeadline(title, fontSize, maxWidth, maxLines) {
   return lines;
 }
 
-function buildOverlaySvg(post) {
+function buildOverlaySvg(post, width, height, bottomSafeZone = 0) {
   const padding = 64;
-  const maxWidth = SOCIAL_W - padding * 2;
+  const maxWidth = width - padding * 2;
   const fontSize = post.title.length > 85 ? 62 : 76;
   const lineHeight = fontSize * 1.14;
   const lines = wrapHeadline(post.title, fontSize, maxWidth, 4);
   const textBlockHeight = lines.length * lineHeight;
-  const baselineStart = SOCIAL_H - 110 - textBlockHeight;
+  const baselineStart = height - 110 - bottomSafeZone - textBlockHeight;
 
   const textSpans = (dx, dy, fill, opacity) =>
     lines
@@ -399,7 +408,7 @@ function buildOverlaySvg(post) {
   const categoryLabel = post.category.replace("-", " ").toUpperCase();
   const badgeWidth = categoryLabel.length * 15 + 48;
 
-  return `<svg width="${SOCIAL_W}" height="${SOCIAL_H}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
@@ -407,7 +416,7 @@ function buildOverlaySvg(post) {
       <stop offset="100%" stop-color="#000000" stop-opacity="0.92"/>
     </linearGradient>
   </defs>
-  <rect x="0" y="0" width="${SOCIAL_W}" height="${SOCIAL_H}" fill="url(#scrim)"/>
+  <rect x="0" y="0" width="${width}" height="${height}" fill="url(#scrim)"/>
   <rect x="${padding}" y="56" width="${badgeWidth}" height="52" rx="10" fill="#ff3b6b"/>
   <text x="${padding + 24}" y="90" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="24" fill="#ffffff" letter-spacing="1">${escapeXml(
     categoryLabel
@@ -416,20 +425,24 @@ function buildOverlaySvg(post) {
     ${textSpans(4, 4, "#000000", 0.55)}
     ${textSpans(0, 0, "#ffffff", 1)}
   </text>
-  <text x="${SOCIAL_W - padding}" y="${SOCIAL_H - 40}" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="26" fill="#ff3b6b" letter-spacing="2">CELEBCITY</text>
+  <text x="${width - padding}" y="${height - bottomSafeZone - 40}" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="26" fill="#ff3b6b" letter-spacing="2">CELEBCITY</text>
 </svg>`;
+}
+
+async function compositeGraphic(rawBuffer, post, width, height, bottomSafeZone = 0) {
+  const overlay = Buffer.from(buildOverlaySvg(post, width, height, bottomSafeZone));
+  return sharp(rawBuffer)
+    .resize(width, height, { fit: "cover", position: "attention" })
+    .composite([{ input: overlay, top: 0, left: 0 }])
+    .jpeg({ quality: 88 })
+    .toBuffer();
 }
 
 async function generateSocialImage(post) {
   const raw = await fetchImageBuffer(post.imageUrl);
   if (!raw) return null;
   try {
-    const overlay = Buffer.from(buildOverlaySvg(post));
-    return await sharp(raw)
-      .resize(SOCIAL_W, SOCIAL_H, { fit: "cover", position: "attention" })
-      .composite([{ input: overlay, top: 0, left: 0 }])
-      .jpeg({ quality: 88 })
-      .toBuffer();
+    return await compositeGraphic(raw, post, SOCIAL_W, SOCIAL_H);
   } catch (err) {
     console.error(`Failed to composite social image for "${post.title}":`, err.message);
     return null;
@@ -449,6 +462,92 @@ async function generateSocialImages(posts) {
     }
     writeFile(`social/${post.slug}.jpg`, jpeg);
     post.socialImageGeneratedAt = new Date().toISOString();
+  });
+}
+
+// ---------- Instagram Reel video (photo + slow zoom + silent audio track via ffmpeg) ----------
+
+let ffmpegAvailable = null;
+function checkFfmpegAvailable() {
+  if (ffmpegAvailable !== null) return ffmpegAvailable;
+  const result = spawnSync("ffmpeg", ["-version"], { stdio: "ignore" });
+  ffmpegAvailable = !result.error;
+  if (!ffmpegAvailable) console.warn("ffmpeg not found — skipping Reel video generation.");
+  return ffmpegAvailable;
+}
+
+async function generateReelVideo(post) {
+  const raw = await fetchImageBuffer(post.imageUrl);
+  if (!raw) return null;
+
+  let frameBuffer;
+  try {
+    frameBuffer = await compositeGraphic(raw, post, REEL_W, REEL_H, REEL_BOTTOM_SAFE_ZONE);
+  } catch (err) {
+    console.error(`Failed to composite reel frame for "${post.title}":`, err.message);
+    return null;
+  }
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "celebcity-reel-"));
+  const inputPath = path.join(tmpDir, "frame.jpg");
+  const outputPath = path.join(tmpDir, "reel.mp4");
+  fs.writeFileSync(inputPath, frameBuffer);
+
+  const totalFrames = REEL_DURATION_SEC * REEL_FPS;
+  const args = [
+    "-y",
+    "-loop",
+    "1",
+    "-i",
+    inputPath,
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=channel_layout=stereo:sample_rate=44100",
+    "-vf",
+    `scale=${REEL_W * 2}:${REEL_H * 2},zoompan=z='min(zoom+0.0012,1.15)':d=${totalFrames}:s=${REEL_W}x${REEL_H}:fps=${REEL_FPS},format=yuv420p`,
+    "-c:v",
+    "libx264",
+    "-profile:v",
+    "high",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    "-shortest",
+    "-t",
+    String(REEL_DURATION_SEC),
+    "-movflags",
+    "+faststart",
+    outputPath,
+  ];
+
+  const result = spawnSync("ffmpeg", args, { encoding: "utf-8" });
+  let videoBuffer = null;
+  if (result.status === 0 && fs.existsSync(outputPath)) {
+    videoBuffer = fs.readFileSync(outputPath);
+  } else {
+    console.error(`ffmpeg failed for "${post.title}":`, (result.stderr || "").slice(-800));
+  }
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  return videoBuffer;
+}
+
+async function generateReels(posts) {
+  if (!checkFfmpegAvailable()) return;
+  const candidates = posts.filter((p) => p.body && p.imageUrl && !p.igPostedAt).slice(0, REEL_LIMIT);
+  if (!candidates.length) return;
+  console.log(`Generating ${candidates.length} Reel videos...`);
+
+  await mapWithConcurrency(candidates, REEL_CONCURRENCY, async (post) => {
+    const video = await generateReelVideo(post);
+    if (!video) {
+      post.reelGeneratedAt = "";
+      return;
+    }
+    writeFile(`reels/${post.slug}.mp4`, video);
+    post.reelGeneratedAt = new Date().toISOString();
   });
 }
 
@@ -799,6 +898,7 @@ async function main() {
   renderSite(merged);
   await generateBrandAssets();
   await generateSocialImages(merged);
+  await generateReels(merged);
   savePosts(merged);
   console.log("Site built at ./site");
 }

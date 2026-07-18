@@ -16,7 +16,10 @@ GitHub Pages hosting → free Instagram auto-posting. No LLM cost, no hosting bi
 4. A GitHub Actions workflow (`.github/workflows/publish.yml`) runs this automatically every
    3 hours, commits the updated post index, and deploys `site/` to GitHub Pages.
 5. A second workflow (`.github/workflows/instagram.yml`) runs every 2 hours and posts the
-   newest not-yet-posted article (photo + caption) to Instagram automatically.
+   newest not-yet-posted article to Instagram automatically — as a **Reel** (short vertical
+   video: the dramatic graphic with a slow zoom + silent audio track, generated for free with
+   `ffmpeg`) when available, since Instagram's algorithm favors video over static photos.
+   Falls back to the dramatic photo, then the plain original photo, if a step fails.
 
 ## Run it locally
 

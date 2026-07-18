@@ -217,12 +217,24 @@ async function createMedia(imageUrl, caption, altText) {
   });
 }
 
+async function createReelMedia(videoUrl, caption, altText) {
+  return graphRequest(`${IG_USER_ID}/media`, {
+    media_type: "REELS",
+    video_url: videoUrl,
+    caption,
+    alt_text: altText,
+    share_to_feed: "true",
+    access_token: IG_ACCESS_TOKEN,
+  });
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function waitUntilMediaReady(creationId) {
-  for (let i = 0; i < 10; i++) {
+  // Video (Reels) processing takes noticeably longer than photos — allow up to ~90s.
+  for (let i = 0; i < 30; i++) {
     const url = new URL(`https://graph.instagram.com/${GRAPH_VERSION}/${creationId}`);
     url.searchParams.set("fields", "status_code");
     url.searchParams.set("access_token", IG_ACCESS_TOKEN);
@@ -230,7 +242,7 @@ async function waitUntilMediaReady(creationId) {
     const json = await res.json();
     if (json.status_code === "FINISHED") return;
     if (json.status_code === "ERROR") throw new Error("Media processing failed on Instagram's side");
-    await sleep(2000);
+    await sleep(3000);
   }
   throw new Error("Media was not ready for publishing after waiting");
 }
@@ -238,18 +250,25 @@ async function waitUntilMediaReady(creationId) {
 async function publishToInstagram(post) {
   const caption = buildCaption(post);
   const altText = buildAltText(post);
+  const reelUrl = `${SITE_BASE_URL}/reels/${post.slug}.mp4`;
   const socialImageUrl = `${SITE_BASE_URL}/social/${post.slug}.jpg`;
-  const preferSocial = Boolean(post.socialImageGeneratedAt);
 
   let created;
-  if (preferSocial) {
+  if (post.reelGeneratedAt) {
+    try {
+      created = await createReelMedia(reelUrl, caption, altText);
+    } catch (err) {
+      console.error(`Reel failed (${err.message}), falling back to photo.`);
+    }
+  }
+  if (!created && post.socialImageGeneratedAt) {
     try {
       created = await createMedia(socialImageUrl, caption, altText);
     } catch (err) {
       console.error(`Dramatic graphic failed (${err.message}), falling back to original photo.`);
-      created = await createMedia(post.imageUrl, caption, altText);
     }
-  } else {
+  }
+  if (!created) {
     created = await createMedia(post.imageUrl, caption, altText);
   }
 

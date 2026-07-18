@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify ffmpeg is available
+        run: ffmpeg -version | head -1
+
       - name: Fetch news and build site
         run: npm run build
 
