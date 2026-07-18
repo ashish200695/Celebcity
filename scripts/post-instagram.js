@@ -217,12 +217,12 @@ async function createMedia(imageUrl, caption, altText) {
   });
 }
 
-async function createReelMedia(videoUrl, caption, altText) {
+async function createReelMedia(videoUrl, caption) {
+  // Note: alt_text is not a supported param for REELS media type (photos only).
   return graphRequest(`${IG_USER_ID}/media`, {
     media_type: "REELS",
     video_url: videoUrl,
     caption,
-    alt_text: altText,
     share_to_feed: "true",
     access_token: IG_ACCESS_TOKEN,
   });
@@ -256,7 +256,7 @@ async function publishToInstagram(post) {
   let created;
   if (post.reelGeneratedAt) {
     try {
-      created = await createReelMedia(reelUrl, caption, altText);
+      created = await createReelMedia(reelUrl, caption);
     } catch (err) {
       console.error(`Reel failed (${err.message}), falling back to photo.`);
     }
