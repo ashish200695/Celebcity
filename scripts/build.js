@@ -431,10 +431,28 @@ function buildOverlaySvg(post, width, height, bottomSafeZone = 0) {
 
 async function compositeGraphic(rawBuffer, post, width, height, bottomSafeZone = 0) {
   const overlay = Buffer.from(buildOverlaySvg(post, width, height, bottomSafeZone));
-  return sharp(rawBuffer)
-    .resize(width, height, { fit: "cover", position: "attention" })
-    .composite([{ input: overlay, top: 0, left: 0 }])
-    .jpeg({ quality: 88 })
+
+  // Blurred, darkened cover-crop as a full-bleed backdrop (imperfections invisible once blurred)...
+  const background = await sharp(rawBuffer)
+    .resize(width, height, { fit: "cover" })
+    .blur(42)
+    .modulate({ brightness: 0.55 })
+    .toBuffer();
+
+  // ...with the full uncropped photo centered on top so faces/subjects are never cut off.
+  const foreground = await sharp(rawBuffer)
+    .resize(width, height, { fit: "inside", kernel: sharp.kernel.lanczos3 })
+    .toBuffer();
+  const fgMeta = await sharp(foreground).metadata();
+  const fgLeft = Math.round((width - fgMeta.width) / 2);
+  const fgTop = Math.round((height - fgMeta.height) / 2);
+
+  return sharp(background)
+    .composite([
+      { input: foreground, left: fgLeft, top: fgTop },
+      { input: overlay, top: 0, left: 0 },
+    ])
+    .jpeg({ quality: 95 })
     .toBuffer();
 }
 
@@ -505,11 +523,19 @@ async function generateReelVideo(post) {
     "-i",
     "anullsrc=channel_layout=stereo:sample_rate=44100",
     "-vf",
-    `scale=${REEL_W * 2}:${REEL_H * 2},zoompan=z='min(zoom+0.0012,1.15)':d=${totalFrames}:s=${REEL_W}x${REEL_H}:fps=${REEL_FPS},format=yuv420p`,
+    // Pre-scale 1.5x with high-quality lanczos before zooming (reduces upscale blur), and
+    // anchor the zoom on the CENTER (iw/2, ih/2) — without explicit x/y, zoompan anchors at
+    // the top-left corner by default, which was cropping out faces and headline text as it
+    // zoomed in. A gentle max zoom (1.08) also keeps the crop subtle.
+    `scale=${Math.round(REEL_W * 1.5)}:${Math.round(REEL_H * 1.5)}:flags=lanczos,zoompan=z='min(zoom+0.0006,1.08)':d=${totalFrames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${REEL_W}x${REEL_H}:fps=${REEL_FPS},format=yuv420p`,
     "-c:v",
     "libx264",
     "-profile:v",
     "high",
+    "-crf",
+    "18",
+    "-preset",
+    "slow",
     "-c:a",
     "aac",
     "-b:a",
