@@ -2,8 +2,11 @@ name: Post Reel to Instagram (every 3 hours)
 
 on:
   schedule:
-    # Every 3 hours, 10am-10pm IST (04:30,07:30,10:30,13:30,16:30 UTC). Silent 10pm-10am IST.
-    - cron: "30 4,7,10,13,16 * * *"
+    # Every 3 hours, 10am-10pm IST (04:00,07:00,10:00,13:00,16:00 UTC). Silent 10pm-10am IST.
+    # Runs at the top of the hour (not :30, like the photo workflow) so the two never fire at
+    # the same instant — avoids a race where both pick the same "newest unposted" article
+    # before either has committed its posted-status update.
+    - cron: "0 4,7,10,13,16 * * *"
   workflow_dispatch: {} # lets you trigger a manual post from the Actions tab
 
 permissions:
