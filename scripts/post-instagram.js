@@ -12,13 +12,163 @@ const SITE_BASE_URL = process.env.SITE_BASE_URL || "https://celebcity.in";
 const GRAPH_VERSION = "v21.0";
 const MAX_ATTEMPTS = 3; // how many candidate posts to try before giving up this run
 
+// Broad, always-included tags that place us in the biggest relevant Bollywood search pools.
+const BASE_HASHTAGS = [
+  "#Bollywood",
+  "#BollywoodNews",
+  "#IndianCinema",
+  "#BollywoodUpdates",
+  "#CelebrityNews",
+  "#BollywoodGossip",
+  "#FilmyNews",
+  "#Entertainment",
+];
+
+// Niche/category tags — smaller pools rank higher within them, good for discovery.
 const HASHTAGS_BY_CATEGORY = {
-  "box-office": "#BoxOffice #Bollywood #BollywoodNews",
-  "ott-releases": "#OTT #Bollywood #BollywoodNews #Streaming",
-  relationships: "#Bollywood #BollywoodNews #Celebrity",
-  fashion: "#BollywoodFashion #Bollywood #CelebStyle",
-  "bollywood-news": "#Bollywood #BollywoodNews #CelebCity",
+  "box-office": [
+    "#BoxOffice",
+    "#BoxOfficeCollection",
+    "#BoxOfficeIndia",
+    "#BollywoodBoxOffice",
+    "#FilmBusiness",
+  ],
+  "ott-releases": [
+    "#OTTRelease",
+    "#StreamingNow",
+    "#OTTUpdates",
+    "#WebSeries",
+    "#BingeWatch",
+  ],
+  relationships: ["#BollywoodCouple", "#CelebRelationship", "#BollywoodShaadi", "#CelebLove"],
+  fashion: ["#BollywoodFashion", "#CelebStyle", "#RedCarpetLook", "#EthnicWear", "#FashionPolice"],
+  "bollywood-news": ["#CelebCity", "#BollywoodUpdate", "#HindiCinema"],
 };
+
+const CATEGORY_EMOJI = {
+  "box-office": "💰",
+  "ott-releases": "📺",
+  relationships: "💔",
+  fashion: "👗",
+  "bollywood-news": "🎬",
+};
+
+const ANNOTATION_PREFIX_RE = /^(EXCLUSIVE|WATCH|BREAKING|VIRAL|OMG|WOW)\s*[:\-]?\s*/i;
+
+// Common headline words that ride along in Title Case but aren't proper nouns —
+// any candidate phrase containing one of these gets dropped rather than truncated,
+// since a partial name/title reads as more spammy than just skipping it.
+const HEADLINE_STOPWORDS = new Set(
+  [
+    "The",
+    "A",
+    "An",
+    "Enters",
+    "Becomes",
+    "Says",
+    "Say",
+    "After",
+    "Ahead",
+    "Amid",
+    "Box",
+    "Office",
+    "Day",
+    "Days",
+    "Week",
+    "Weeks",
+    "Year",
+    "Years",
+    "Crore",
+    "Club",
+    "Fastest",
+    "Slowest",
+    "Film",
+    "Films",
+    "Movie",
+    "Movies",
+    "Wave",
+    "New",
+    "First",
+    "Second",
+    "Third",
+    "Song",
+    "From",
+    "With",
+    "Not",
+    "Why",
+    "How",
+    "What",
+    "When",
+    "Who",
+    "Actor",
+    "Actress",
+    "Star",
+    "News",
+    "Update",
+    "Updates",
+    "Video",
+    "Watch",
+    "Photo",
+    "Photos",
+    "Look",
+    "Looks",
+    "Big",
+    "Top",
+    "Best",
+    "Most",
+    "List",
+    "India",
+    "Indian",
+    "This",
+    "That",
+    "Is",
+    "Are",
+    "Was",
+    "Were",
+    "Will",
+    "Recalls",
+    "Reveals",
+    "Shares",
+    "Opens",
+    "Breaks",
+    "Makes",
+    "Gets",
+    "Gives",
+    "Takes",
+  ].map((w) => w.toLowerCase())
+);
+
+function extractEntityHashtags(title) {
+  const cleaned = title.replace(ANNOTATION_PREFIX_RE, "").replace(/['’]/g, "");
+  const matches = cleaned.match(/\b[A-Z][a-zA-Z]*(?:\s[A-Z][a-zA-Z]*){0,2}\b/g) || [];
+  const seen = new Set();
+  const tags = [];
+  for (const m of matches) {
+    const words = m.split(/\s+/).filter((w) => w.length > 1);
+    if (!words.length) continue;
+    if (words.some((w) => HEADLINE_STOPWORDS.has(w.toLowerCase()))) continue;
+    const tag = `#${words.join("")}`;
+    const key = tag.toLowerCase();
+    if (tag.length < 4 || tag.length > 30 || seen.has(key)) continue;
+    seen.add(key);
+    tags.push(tag);
+  }
+  return tags.slice(0, 6);
+}
+
+function buildHashtags(post) {
+  const categoryTags = HASHTAGS_BY_CATEGORY[post.category] || HASHTAGS_BY_CATEGORY["bollywood-news"];
+  const entityTags = extractEntityHashtags(post.title);
+  const combined = [...BASE_HASHTAGS, ...categoryTags, ...entityTags];
+  const seen = new Set();
+  const deduped = combined.filter((t) => {
+    const key = t.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return deduped.slice(0, 25).join(" ");
+}
 
 function loadPosts() {
   if (!fs.existsSync(DATA_FILE)) return [];
@@ -32,9 +182,17 @@ function savePosts(posts) {
 function buildCaption(post) {
   const bodyLines = (post.body || []).slice(1, 3); // skip the generic opener line
   const excerpt = bodyLines.join(" ").slice(0, 350);
-  const hashtags = HASHTAGS_BY_CATEGORY[post.category] || HASHTAGS_BY_CATEGORY["bollywood-news"];
+  const emoji = CATEGORY_EMOJI[post.category] || CATEGORY_EMOJI["bollywood-news"];
+  const hashtags = buildHashtags(post);
   const articleUrl = `${SITE_BASE_URL}/article/${post.slug}/`;
-  return [post.title, "", excerpt, "", `Full story: ${articleUrl}`, "", hashtags].join("\n").slice(0, 2190);
+  return [`${emoji} ${post.title}`, "", excerpt, "", `Full story: ${articleUrl} (link in bio)`, "", hashtags]
+    .join("\n")
+    .slice(0, 2190);
+}
+
+function buildAltText(post) {
+  const label = post.category.replace("-", " ");
+  return `${post.title} — ${label} news photo, CelebCity`.slice(0, 1000);
 }
 
 async function graphRequest(pathSegment, params) {
@@ -50,10 +208,11 @@ async function graphRequest(pathSegment, params) {
   return json;
 }
 
-async function createMedia(imageUrl, caption) {
+async function createMedia(imageUrl, caption, altText) {
   return graphRequest(`${IG_USER_ID}/media`, {
     image_url: imageUrl,
     caption,
+    alt_text: altText,
     access_token: IG_ACCESS_TOKEN,
   });
 }
@@ -78,19 +237,20 @@ async function waitUntilMediaReady(creationId) {
 
 async function publishToInstagram(post) {
   const caption = buildCaption(post);
+  const altText = buildAltText(post);
   const socialImageUrl = `${SITE_BASE_URL}/social/${post.slug}.jpg`;
   const preferSocial = Boolean(post.socialImageGeneratedAt);
 
   let created;
   if (preferSocial) {
     try {
-      created = await createMedia(socialImageUrl, caption);
+      created = await createMedia(socialImageUrl, caption, altText);
     } catch (err) {
       console.error(`Dramatic graphic failed (${err.message}), falling back to original photo.`);
-      created = await createMedia(post.imageUrl, caption);
+      created = await createMedia(post.imageUrl, caption, altText);
     }
   } else {
-    created = await createMedia(post.imageUrl, caption);
+    created = await createMedia(post.imageUrl, caption, altText);
   }
 
   await waitUntilMediaReady(created.id);
