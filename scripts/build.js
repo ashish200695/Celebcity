@@ -512,6 +512,19 @@ async function generateReelVideo(post) {
   fs.writeFileSync(inputPath, frameBuffer);
 
   const totalFrames = REEL_DURATION_SEC * REEL_FPS;
+  const fadeOutStart = Math.max(REEL_DURATION_SEC - 1, 0);
+  // Procedurally generated ambient chord bed (three sine tones + a gentle tremolo pulse) —
+  // zero copyright risk and no external file dependency, unlike baking in real music.
+  const videoFilter =
+    // Pre-scale 1.5x with high-quality lanczos before zooming (reduces upscale blur), and
+    // anchor the zoom on the CENTER (iw/2, ih/2) — without explicit x/y, zoompan anchors at
+    // the top-left corner by default, which was cropping out faces and headline text as it
+    // zoomed in. A gentle max zoom (1.08) also keeps the crop subtle.
+    `[0:v]scale=${Math.round(REEL_W * 1.5)}:${Math.round(
+      REEL_H * 1.5
+    )}:flags=lanczos,zoompan=z='min(zoom+0.0006,1.08)':d=${totalFrames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${REEL_W}x${REEL_H}:fps=${REEL_FPS},format=yuv420p[vout]`;
+  const audioFilter = `[1:a][2:a][3:a]amix=inputs=3:duration=longest:dropout_transition=0,tremolo=f=3:d=0.25,volume=0.15,afade=t=in:st=0:d=1,afade=t=out:st=${fadeOutStart}:d=1[aout]`;
+
   const args = [
     "-y",
     "-loop",
@@ -521,13 +534,21 @@ async function generateReelVideo(post) {
     "-f",
     "lavfi",
     "-i",
-    "anullsrc=channel_layout=stereo:sample_rate=44100",
-    "-vf",
-    // Pre-scale 1.5x with high-quality lanczos before zooming (reduces upscale blur), and
-    // anchor the zoom on the CENTER (iw/2, ih/2) — without explicit x/y, zoompan anchors at
-    // the top-left corner by default, which was cropping out faces and headline text as it
-    // zoomed in. A gentle max zoom (1.08) also keeps the crop subtle.
-    `scale=${Math.round(REEL_W * 1.5)}:${Math.round(REEL_H * 1.5)}:flags=lanczos,zoompan=z='min(zoom+0.0006,1.08)':d=${totalFrames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${REEL_W}x${REEL_H}:fps=${REEL_FPS},format=yuv420p`,
+    `sine=frequency=261.63:duration=${REEL_DURATION_SEC}`,
+    "-f",
+    "lavfi",
+    "-i",
+    `sine=frequency=329.63:duration=${REEL_DURATION_SEC}`,
+    "-f",
+    "lavfi",
+    "-i",
+    `sine=frequency=392.00:duration=${REEL_DURATION_SEC}`,
+    "-filter_complex",
+    `${videoFilter};${audioFilter}`,
+    "-map",
+    "[vout]",
+    "-map",
+    "[aout]",
     "-c:v",
     "libx264",
     "-profile:v",
