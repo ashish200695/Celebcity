@@ -58,6 +58,24 @@ async function createMedia(imageUrl, caption) {
   });
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitUntilMediaReady(creationId) {
+  for (let i = 0; i < 10; i++) {
+    const url = new URL(`https://graph.instagram.com/${GRAPH_VERSION}/${creationId}`);
+    url.searchParams.set("fields", "status_code");
+    url.searchParams.set("access_token", IG_ACCESS_TOKEN);
+    const res = await fetch(url);
+    const json = await res.json();
+    if (json.status_code === "FINISHED") return;
+    if (json.status_code === "ERROR") throw new Error("Media processing failed on Instagram's side");
+    await sleep(2000);
+  }
+  throw new Error("Media was not ready for publishing after waiting");
+}
+
 async function publishToInstagram(post) {
   const caption = buildCaption(post);
   const socialImageUrl = `${SITE_BASE_URL}/social/${post.slug}.jpg`;
@@ -74,6 +92,8 @@ async function publishToInstagram(post) {
   } else {
     created = await createMedia(post.imageUrl, caption);
   }
+
+  await waitUntilMediaReady(created.id);
 
   await graphRequest(`${IG_USER_ID}/media_publish`, {
     creation_id: created.id,
