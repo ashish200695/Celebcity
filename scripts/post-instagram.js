@@ -50,15 +50,31 @@ async function graphRequest(pathSegment, params) {
   return json;
 }
 
-async function publishToInstagram(post) {
-  const caption = buildCaption(post);
-  const socialImageUrl = `${SITE_BASE_URL}/social/${post.slug}.jpg`;
-  const imageUrl = post.socialImageGeneratedAt ? socialImageUrl : post.imageUrl;
-  const created = await graphRequest(`${IG_USER_ID}/media`, {
+async function createMedia(imageUrl, caption) {
+  return graphRequest(`${IG_USER_ID}/media`, {
     image_url: imageUrl,
     caption,
     access_token: IG_ACCESS_TOKEN,
   });
+}
+
+async function publishToInstagram(post) {
+  const caption = buildCaption(post);
+  const socialImageUrl = `${SITE_BASE_URL}/social/${post.slug}.jpg`;
+  const preferSocial = Boolean(post.socialImageGeneratedAt);
+
+  let created;
+  if (preferSocial) {
+    try {
+      created = await createMedia(socialImageUrl, caption);
+    } catch (err) {
+      console.error(`Dramatic graphic failed (${err.message}), falling back to original photo.`);
+      created = await createMedia(post.imageUrl, caption);
+    }
+  } else {
+    created = await createMedia(post.imageUrl, caption);
+  }
+
   await graphRequest(`${IG_USER_ID}/media_publish`, {
     creation_id: created.id,
     access_token: IG_ACCESS_TOKEN,
