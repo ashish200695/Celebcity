@@ -179,9 +179,14 @@ function savePosts(posts) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(posts, null, 2));
 }
 
+const CAPTION_BOILERPLATE_RE =
+  /entertainment desk|team of journalists|red carpet goes unrolled|insider insights|dynamic and dedicated|disclaimer:|subscribe|newsletter|follow us on/i;
+
 function buildCaption(post) {
-  const bodyLines = (post.body || []).slice(1, 3); // skip the generic opener line
-  const excerpt = bodyLines.join(" ").slice(0, 350);
+  // Skip the generic opener line, and defensively drop any boilerplate that slipped
+  // past the scraper's own filter (e.g. a publisher's "about our newsroom" blurb).
+  const bodyLines = (post.body || []).slice(1).filter((line) => !CAPTION_BOILERPLATE_RE.test(line));
+  const excerpt = bodyLines.slice(0, 2).join(" ").slice(0, 350);
   const emoji = CATEGORY_EMOJI[post.category] || CATEGORY_EMOJI["bollywood-news"];
   const hashtags = buildHashtags(post);
   const articleUrl = `${SITE_BASE_URL}/article/${post.slug}/`;

@@ -208,7 +208,7 @@ function extractArticleParagraphs(html) {
     .filter(
       (text) =>
         text.length > 45 &&
-        !/subscribe|cookie|advertisement|all rights reserved|preferred source|also read|catch us for|continue with google|log in with|sign up|newsletter|follow us on|download the app|click here|e-paper/i.test(
+        !/subscribe|cookie|advertisement|all rights reserved|preferred source|also read|catch us for|continue with google|log in with|sign up|newsletter|follow us on|download the app|click here|e-paper|entertainment desk|team of journalists|red carpet goes unrolled|insider insights|dynamic and dedicated|disclaimer:|end of article/i.test(
           text
         )
     );
@@ -676,8 +676,12 @@ function timeTag(dateStr) {
   return `<time datetime="${new Date(dateStr).toISOString()}">${formatDate(dateStr)}</time>`;
 }
 
+const DISPLAY_BOILERPLATE_RE =
+  /entertainment desk|team of journalists|red carpet goes unrolled|insider insights|dynamic and dedicated|disclaimer:|subscribe|newsletter|follow us on/i;
+
 function excerptOf(post) {
-  const first = (post.body || [])[1] || (post.body || [])[0] || "";
+  const lines = (post.body || []).filter((line) => !DISPLAY_BOILERPLATE_RE.test(line));
+  const first = lines[1] || lines[0] || "";
   return first.length > 160 ? first.slice(0, 157) + "..." : first;
 }
 
