@@ -247,14 +247,14 @@ async function waitUntilMediaReady(creationId) {
   throw new Error("Media was not ready for publishing after waiting");
 }
 
-async function publishToInstagram(post) {
+async function publishToInstagram(post, mode) {
   const caption = buildCaption(post);
   const altText = buildAltText(post);
   const reelUrl = `${SITE_BASE_URL}/reels/${post.slug}.mp4`;
   const socialImageUrl = `${SITE_BASE_URL}/social/${post.slug}.jpg`;
 
   let created;
-  if (post.reelGeneratedAt) {
+  if (mode === "reel" && post.reelGeneratedAt) {
     try {
       created = await createReelMedia(reelUrl, caption);
     } catch (err) {
@@ -286,10 +286,14 @@ async function main() {
     process.exit(0); // don't fail the workflow — just skip until secrets are configured
   }
 
+  // POST_MODE=reel -> only post articles with a Reel ready (runs on the reel schedule).
+  // POST_MODE=photo (default) -> post as a photo regardless of Reel availability.
+  const mode = process.env.POST_MODE === "reel" ? "reel" : "photo";
+  console.log(`Running in ${mode} mode.`);
+
   const posts = loadPosts();
-  const candidates = posts
-    .filter((p) => p.body && p.imageUrl && !p.igPostedAt && !p.igPostFailedAt)
-    .slice(0, MAX_ATTEMPTS);
+  const eligible = posts.filter((p) => p.body && p.imageUrl && !p.igPostedAt && !p.igPostFailedAt);
+  const candidates = (mode === "reel" ? eligible.filter((p) => p.reelGeneratedAt) : eligible).slice(0, MAX_ATTEMPTS);
 
   if (!candidates.length) {
     console.log("No eligible unposted articles found.");
@@ -299,7 +303,7 @@ async function main() {
   for (const post of candidates) {
     try {
       console.log(`Posting to Instagram: ${post.title}`);
-      await publishToInstagram(post);
+      await publishToInstagram(post, mode);
       post.igPostedAt = new Date().toISOString();
       savePosts(posts);
       console.log("Posted successfully.");

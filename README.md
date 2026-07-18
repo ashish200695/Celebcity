@@ -14,12 +14,18 @@ GitHub Pages hosting → free Instagram auto-posting. No LLM cost, no hosting bi
    site. Only a small text credit ("Source: X") links back to the original publisher at the
    very bottom; readers stay on your page.
 4. A GitHub Actions workflow (`.github/workflows/publish.yml`) runs this automatically every
-   3 hours, commits the updated post index, and deploys `site/` to GitHub Pages.
-5. A second workflow (`.github/workflows/instagram.yml`) runs every 2 hours and posts the
-   newest not-yet-posted article to Instagram automatically — as a **Reel** (short vertical
-   video: the dramatic graphic with a slow zoom + silent audio track, generated for free with
-   `ffmpeg`) when available, since Instagram's algorithm favors video over static photos.
-   Falls back to the dramatic photo, then the plain original photo, if a step fails.
+   3 hours, commits the updated post index, and deploys `site/` to GitHub Pages. This same
+   run also generates each new article's dramatic graphic and (for the newest ~15) a short
+   Reel video via `ffmpeg` (zoom effect + a procedurally-generated ambient audio bed — no
+   copyright risk, no external file dependency).
+5. Two more workflows post to Instagram on independent schedules, both 10am-10pm IST:
+   - `.github/workflows/instagram-photo.yml` — **every hour**, posts the newest not-yet-posted
+     article as a photo (dramatic graphic, falling back to the plain original photo if needed).
+   - `.github/workflows/instagram-reel.yml` — **every 3 hours**, posts the newest not-yet-posted
+     article that has a Reel ready, as an actual Instagram Reel (falls back to a photo post if
+     the Reel isn't ready or fails).
+   - Each article is only ever posted once (by whichever workflow gets to it first), so photos
+     and Reels never duplicate the same story.
 
 ## Run it locally
 
@@ -100,10 +106,9 @@ Facebook Page. This part has to be done by you (it's your account), roughly 10 m
    - (Optional) New repository variable `SITE_BASE_URL` = your real domain, e.g.
      `https://celebcity.com`, so Instagram captions link to the right place
 
-Once those secrets exist, `.github/workflows/instagram.yml` will automatically post the
-latest rewritten article (photo + caption + hashtags) every 2 hours — no further action
-needed. If secrets aren't set yet, the workflow runs and skips harmlessly (check the Actions
-tab logs).
+Once those secrets exist, `instagram-photo.yml` (hourly) and `instagram-reel.yml` (every 3
+hours) will automatically post to Instagram — no further action needed. If secrets aren't set
+yet, both workflows run and skip harmlessly (check the Actions tab logs).
 
 **Token expiry reminder**: unless you set up a System User token, the access token expires
 every ~60 days and posting will silently stop until you generate a new one and update the
@@ -116,10 +121,13 @@ Edit the `FEEDS` array near the top of `scripts/build.js` to add/remove RSS sour
 
 ## Scheduling
 
-- Site rebuild: every 3 hours (`.github/workflows/publish.yml`)
-- Instagram post: every 2 hours, 10am-10pm IST only, silent 12am-9am IST
-  (`.github/workflows/instagram.yml`) — 7 posts/day, well under Instagram's ~25 posts/24h
-  publishing limit.
+- Site rebuild + Reel/graphic generation: every 3 hours (`.github/workflows/publish.yml`)
+- Instagram photo: every hour, 10am-10pm IST (`.github/workflows/instagram-photo.yml`) — 13
+  posts/day
+- Instagram Reel: every 3 hours, 10am-10pm IST (`.github/workflows/instagram-reel.yml`) — 5
+  posts/day
+- Total ~18 posts/day, comfortably under Instagram's official limit of 100 API-published
+  posts per rolling 24-hour period.
 
 GitHub Actions free tier gives public repos **unlimited** scheduled-workflow minutes.
 
