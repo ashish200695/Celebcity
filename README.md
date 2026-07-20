@@ -21,9 +21,10 @@ GitHub Pages hosting → free Instagram auto-posting. No LLM cost, no hosting bi
 5. Two more workflows post to Instagram on independent schedules, both 10am-10pm IST:
    - `.github/workflows/instagram-photo.yml` — **every hour**, posts the newest not-yet-posted
      article as a photo (dramatic graphic, falling back to the plain original photo if needed).
-   - `.github/workflows/instagram-reel.yml` — **every 3 hours**, posts the newest not-yet-posted
+   - `.github/workflows/instagram-reel.yml` — **every 2 hours**, posts the newest not-yet-posted
      article that has a Reel ready, as an actual Instagram Reel (falls back to a photo post if
-     the Reel isn't ready or fails).
+     the Reel isn't ready or fails). Bumped up from every 3 hours since Reels are measurably
+     outperforming photos on reach.
    - Each article is only ever posted once (by whichever workflow gets to it first), so photos
      and Reels never duplicate the same story.
 
@@ -124,9 +125,9 @@ Edit the `FEEDS` array near the top of `scripts/build.js` to add/remove RSS sour
 - Site rebuild + Reel/graphic generation: every 3 hours (`.github/workflows/publish.yml`)
 - Instagram photo: every hour, 10am-10pm IST (`.github/workflows/instagram-photo.yml`) — 13
   posts/day
-- Instagram Reel: every 3 hours, 10am-10pm IST (`.github/workflows/instagram-reel.yml`) — 5
+- Instagram Reel: every 2 hours, 10am-10pm IST (`.github/workflows/instagram-reel.yml`) — 7
   posts/day
-- Total ~18 posts/day, comfortably under Instagram's official limit of 100 API-published
+- Total ~20 posts/day, comfortably under Instagram's official limit of 100 API-published
   posts per rolling 24-hour period.
 
 GitHub Actions free tier gives public repos **unlimited** scheduled-workflow minutes.
