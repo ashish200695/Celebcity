@@ -11,6 +11,7 @@ const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
 const SITE_BASE_URL = process.env.SITE_BASE_URL || "https://celebcity.in";
 const GRAPH_VERSION = "v21.0";
 const MAX_ATTEMPTS = 3; // how many candidate posts to try before giving up this run
+const MAX_RETRIES = 3; // how many separate runs a single article gets before being abandoned
 
 // Broad, always-included tags that place us in the biggest relevant Bollywood search pools.
 const BASE_HASHTAGS = [
@@ -237,9 +238,12 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitUntilMediaReady(creationId) {
-  // Video (Reels) processing takes noticeably longer than photos — allow up to ~90s.
-  for (let i = 0; i < 30; i++) {
+async function waitUntilMediaReady(creationId, isVideo) {
+  // Video (Reels) processing is noticeably slower and more variable than photos, and can
+  // occasionally exceed a minute or two under load — give it up to ~4 minutes. Photos are
+  // effectively instant, so a short timeout there just fails fast on genuine problems.
+  const maxAttempts = isVideo ? 80 : 15;
+  for (let i = 0; i < maxAttempts; i++) {
     const url = new URL(`https://graph.instagram.com/${GRAPH_VERSION}/${creationId}`);
     url.searchParams.set("fields", "status_code");
     url.searchParams.set("access_token", IG_ACCESS_TOKEN);
@@ -259,9 +263,11 @@ async function publishToInstagram(post, mode) {
   const socialImageUrl = `${SITE_BASE_URL}/social/${post.slug}.jpg`;
 
   let created;
+  let isVideo = false;
   if (mode === "reel" && post.reelGeneratedAt) {
     try {
       created = await createReelMedia(reelUrl, caption);
+      isVideo = true;
     } catch (err) {
       console.error(`Reel failed (${err.message}), falling back to photo.`);
     }
@@ -277,7 +283,7 @@ async function publishToInstagram(post, mode) {
     created = await createMedia(post.imageUrl, caption, altText);
   }
 
-  await waitUntilMediaReady(created.id);
+  await waitUntilMediaReady(created.id, isVideo);
 
   await graphRequest(`${IG_USER_ID}/media_publish`, {
     creation_id: created.id,
@@ -297,7 +303,12 @@ async function main() {
   console.log(`Running in ${mode} mode.`);
 
   const posts = loadPosts();
-  const eligible = posts.filter((p) => p.body && p.imageUrl && !p.igPostedAt && !p.igPostFailedAt);
+  // Retry transient failures (e.g. "media not ready yet") up to MAX_RETRIES times across
+  // separate runs before giving up on an article for good — a single failure is very often
+  // just a slow Instagram processing queue, not a real problem with that article.
+  const eligible = posts.filter(
+    (p) => p.body && p.imageUrl && !p.igPostedAt && (p.igPostAttempts || 0) < MAX_RETRIES
+  );
   const candidates = (mode === "reel" ? eligible.filter((p) => p.reelGeneratedAt) : eligible).slice(0, MAX_ATTEMPTS);
 
   if (!candidates.length) {
@@ -315,7 +326,11 @@ async function main() {
       return; // one post per run
     } catch (err) {
       console.error(`Failed to post "${post.title}":`, err.message);
-      post.igPostFailedAt = new Date().toISOString(); // avoid retrying a broken image forever
+      post.igPostAttempts = (post.igPostAttempts || 0) + 1;
+      post.igLastFailureAt = new Date().toISOString();
+      if (post.igPostAttempts >= MAX_RETRIES) {
+        post.igPostFailedAt = post.igLastFailureAt; // give up for good after MAX_RETRIES tries
+      }
       savePosts(posts);
     }
   }
