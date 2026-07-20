@@ -628,6 +628,14 @@ function layout({ title, description, body, canonicalPath, prefix, ogImage, ogTy
 <meta name="twitter:description" content="${escapeHtml(description || "")}">
 <meta name="twitter:image" content="${escapeHtml(image)}">
 ${jsonLd ? `<script type="application/ld+json">${jsonLd}</script>` : ""}
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-CPRBD1CCEH"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-CPRBD1CCEH');
+</script>
 </head>
 <body>
 <header class="site-header">
