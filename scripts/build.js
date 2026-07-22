@@ -1016,6 +1016,10 @@ async function main() {
 
   const existing = loadPosts();
   let merged = mergeNewPosts(existing, freshItems);
+  // Self-healing: drop any excluded trending topics every run, regardless of how they got
+  // into posts.json (concurrent-commit git merges can resurrect deleted array entries, so
+  // filtering only at fetch-time isn't enough — this re-applies on the full dataset each time).
+  merged = merged.filter((p) => !(p.category === "trending" && TRENDING_EXCLUDE_RE.test(p.title)));
   merged.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
   if (merged.length > MAX_TOTAL_POSTS) merged = merged.slice(0, MAX_TOTAL_POSTS);
 
