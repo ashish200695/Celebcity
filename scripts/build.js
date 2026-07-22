@@ -112,6 +112,11 @@ function cleanTitle(title) {
 // since they're repeating custom-namespace elements rss-parser doesn't expose by default.
 const TRENDING_RSS_URL = "https://trends.google.com/trending/rss?geo=IN";
 
+// Google Trends' India feed pulls in genuinely-trending but off-topic noise for a celeb/
+// entertainment audience (sports scores, gadget launches) — filter those out.
+const TRENDING_EXCLUDE_RE =
+  /\b(football|soccer|cricket|hockey|badminton|tennis|manchester united|manchester city|real madrid|barcelona|premier league|la liga|ipl\b|bcci|olympics|f1\b|formula 1|nba|nfl|wimbledon|wrestling|wwe)\b|electronics|smartphone|laptop|processor|chipset|gadget|camera\b|image sensor|iphone|samsung galaxy|macbook|graphics card/i;
+
 async function fetchTrendingTopics() {
   try {
     const res = await fetch(TRENDING_RSS_URL, {
@@ -130,8 +135,10 @@ async function fetchTrendingTopics() {
       const url = (newsBlock.match(/<ht:news_item_url>([\s\S]*?)<\/ht:news_item_url>/) || [])[1];
       const source = (newsBlock.match(/<ht:news_item_source>([\s\S]*?)<\/ht:news_item_source>/) || [])[1];
       if (!title || !url) continue;
+      const decodedTitle = cleanTitle(decodeXmlEntities(title));
+      if (TRENDING_EXCLUDE_RE.test(decodedTitle)) continue;
       items.push({
-        title: cleanTitle(decodeXmlEntities(title)),
+        title: decodedTitle,
         link: url.trim(),
         pubDate: new Date().toISOString(),
         sourceName: source ? decodeXmlEntities(source).trim() : "Trending",
@@ -777,7 +784,9 @@ function organizationJsonLd() {
 
 function renderHome(posts) {
   const prefix = "";
-  const latest = posts.slice(0, MAX_POSTS_ON_HOME);
+  // Landing page stays celebs-only — the "trending" grab-bag (protests, general news, etc.)
+  // is confined to its own /category/trending/ tab, never mixed into the main feed.
+  const latest = posts.filter((p) => p.category !== "trending").slice(0, MAX_POSTS_ON_HOME);
   const body = `<section class="hero">
   <h1>Bollywood News, Updated Automatically</h1>
   <p>Latest Bollywood celebrity news, box office numbers, OTT releases and more — refreshed around the clock.</p>
