@@ -106,6 +106,55 @@ function cleanTitle(title) {
   return title ? title.replace(/\s+/g, " ").trim() : title;
 }
 
+// Google Trends' free "Daily Search Trends" RSS for India — naturally capped to ~10 items,
+// which is exactly the "most trending only, not everything" behavior we want. Each trend
+// links to real news articles via nested <ht:news_item> blocks, which we parse manually
+// since they're repeating custom-namespace elements rss-parser doesn't expose by default.
+const TRENDING_RSS_URL = "https://trends.google.com/trending/rss?geo=IN";
+
+async function fetchTrendingTopics() {
+  try {
+    const res = await fetch(TRENDING_RSS_URL, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return [];
+    const xml = await res.text();
+    const itemBlocks = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
+    const items = [];
+    for (const block of itemBlocks) {
+      const newsItemMatch = block.match(/<ht:news_item>[\s\S]*?<\/ht:news_item>/);
+      if (!newsItemMatch) continue;
+      const newsBlock = newsItemMatch[0];
+      const title = (newsBlock.match(/<ht:news_item_title>([\s\S]*?)<\/ht:news_item_title>/) || [])[1];
+      const url = (newsBlock.match(/<ht:news_item_url>([\s\S]*?)<\/ht:news_item_url>/) || [])[1];
+      const source = (newsBlock.match(/<ht:news_item_source>([\s\S]*?)<\/ht:news_item_source>/) || [])[1];
+      if (!title || !url) continue;
+      items.push({
+        title: cleanTitle(decodeXmlEntities(title)),
+        link: url.trim(),
+        pubDate: new Date().toISOString(),
+        sourceName: source ? decodeXmlEntities(source).trim() : "Trending",
+        category: "trending",
+      });
+    }
+    return items;
+  } catch (err) {
+    console.error("Failed to fetch Google Trends:", err.message);
+    return [];
+  }
+}
+
+function decodeXmlEntities(str) {
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
+}
+
 async function fetchAllFeeds() {
   const items = [];
   for (const feed of FEEDS) {
@@ -127,6 +176,7 @@ async function fetchAllFeeds() {
       console.error(`Failed to fetch feed ${feed.url}:`, err.message);
     }
   }
+  items.push(...(await fetchTrendingTopics()));
   return items;
 }
 
@@ -289,6 +339,7 @@ const OPENERS = {
   fashion: "Here's the latest fashion moment turning heads:",
   "bollywood-news": "Here's the latest update from the Bollywood world:",
   hollywood: "Here's the latest update from the Hollywood/Marvel world:",
+  trending: "Here's what's trending across India right now:",
 };
 
 function rephraseArticle(paragraphs, category, title) {
@@ -651,7 +702,7 @@ ${jsonLd ? `<script type="application/ld+json">${jsonLd}</script>` : ""}
   <nav>
     <a href="${prefix}category/bollywood-news/">News</a>
     <a href="${prefix}category/box-office/">Box Office</a>
-    <a href="${prefix}category/celebrity/">Celebrity</a>
+    <a href="${prefix}category/trending/">Trending</a>
     <a href="${prefix}category/ott-releases/">OTT</a>
     <a href="${prefix}category/relationships/">Relationships</a>
     <a href="${prefix}category/fashion/">Fashion</a>
@@ -931,7 +982,7 @@ function renderSite(posts) {
   writeFile("style.css", STYLE_CSS);
   writeFile("index.html", renderHome(posts));
 
-  const categories = ["bollywood-news", ...CATEGORY_RULES.map(([, cat]) => cat)];
+  const categories = ["bollywood-news", "trending", ...CATEGORY_RULES.map(([, cat]) => cat)];
   for (const cat of categories) {
     writeFile(`category/${cat}/index.html`, renderCategory(cat, posts));
   }
