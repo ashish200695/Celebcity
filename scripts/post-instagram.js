@@ -13,6 +13,11 @@ const GRAPH_VERSION = "v21.0";
 const MAX_ATTEMPTS = 3; // how many candidate posts to try before giving up this run
 const MAX_RETRIES = 3; // how many separate runs a single article gets before being abandoned
 
+// TEMPORARY (set 2026-07-23, per explicit request): photo posts only cover CJP protest news
+// until told to resume normal rotation. Set to null to go back to posting everything as usual.
+// Does NOT affect Reels — those keep pulling from the full article pool unchanged.
+const PHOTO_ONLY_TOPIC_RE = /\bCJP\b|Cockroach Janta Party|Sansad Chalo|Jantar Mantar/i;
+
 // Broad, always-included tags that place us in the biggest relevant Bollywood search pools.
 const BASE_HASHTAGS = [
   "#Bollywood",
@@ -161,10 +166,19 @@ function extractEntityHashtags(title) {
   return tags.slice(0, 6);
 }
 
+// Dedicated tag set for CJP coverage — mixing in generic #Bollywood tags on a political
+// protest story would look mismatched/spammy and actively hurt reach, not help it.
+const CJP_HASHTAGS = ["#CJP", "#CJPProtest", "#JantarMantar", "#SansadChalo", "#Delhi", "#IndiaProtest"];
+const NEWS_BASE_HASHTAGS = ["#IndiaNews", "#Trending", "#TrendingNow", "#BreakingNews"];
+
 function buildHashtags(post) {
-  const categoryTags = HASHTAGS_BY_CATEGORY[post.category] || HASHTAGS_BY_CATEGORY["bollywood-news"];
+  const isCjp = PHOTO_ONLY_TOPIC_RE && PHOTO_ONLY_TOPIC_RE.test(post.title);
+  const baseTags = isCjp ? NEWS_BASE_HASHTAGS : BASE_HASHTAGS;
+  const categoryTags = isCjp
+    ? CJP_HASHTAGS
+    : HASHTAGS_BY_CATEGORY[post.category] || HASHTAGS_BY_CATEGORY["bollywood-news"];
   const entityTags = extractEntityHashtags(post.title);
-  const combined = [...BASE_HASHTAGS, ...categoryTags, ...entityTags];
+  const combined = [...baseTags, ...categoryTags, ...entityTags];
   const seen = new Set();
   const deduped = combined.filter((t) => {
     const key = t.toLowerCase();
@@ -313,10 +327,18 @@ async function main() {
   const eligible = posts.filter(
     (p) => p.body && p.imageUrl && !p.igPostedAt && (p.igPostAttempts || 0) < MAX_RETRIES
   );
-  const candidates = (mode === "reel" ? eligible.filter((p) => p.reelGeneratedAt) : eligible).slice(0, MAX_ATTEMPTS);
+  let modeEligible = mode === "reel" ? eligible.filter((p) => p.reelGeneratedAt) : eligible;
+  if (mode === "photo" && PHOTO_ONLY_TOPIC_RE) {
+    modeEligible = modeEligible.filter((p) => PHOTO_ONLY_TOPIC_RE.test(p.title));
+  }
+  const candidates = modeEligible.slice(0, MAX_ATTEMPTS);
 
   if (!candidates.length) {
-    console.log("No eligible unposted articles found.");
+    console.log(
+      mode === "photo" && PHOTO_ONLY_TOPIC_RE
+        ? "No eligible CJP articles found this run (photo posting is topic-restricted right now)."
+        : "No eligible unposted articles found."
+    );
     return;
   }
 
