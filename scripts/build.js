@@ -32,11 +32,15 @@ const REEL_CONCURRENCY = 2;
 // Free RSS feeds only — no API keys required. These are direct publisher feeds
 // (not Google News' redirect-wrapped links) so we can actually fetch and
 // rephrase the full article text.
+// Specific trending Hollywood franchises we also cover, on top of Bollywood — deliberately
+// narrow (not "all Hollywood") since these overlap heavily with the Indian audience's interest.
+const TRENDING_HOLLYWOOD_RE = /spider-?man|marvel|avengers|doomsday|the odyssey|\bnolan\b/i;
+
 const FEEDS = [
   {
     url: "https://timesofindia.indiatimes.com/rssfeeds/1081479906.cms",
     siteName: "Times of India",
-    filterPath: "/bollywood/",
+    filterFn: (item) => /\/bollywood\//.test(item.link || "") || TRENDING_HOLLYWOOD_RE.test(item.title || ""),
   },
   {
     url: "https://www.hindustantimes.com/feeds/rss/entertainment/bollywood/rssfeed.xml",
@@ -50,11 +54,14 @@ const FEEDS = [
     url: "https://www.koimoi.com/feed/",
     siteName: "Koimoi",
     filterFn: (item) =>
-      (item.categories || []).some((c) => /bollywood/i.test(c)) || /\/bollywood-news\//.test(item.link || ""),
+      (item.categories || []).some((c) => /bollywood/i.test(c)) ||
+      /\/bollywood-news\//.test(item.link || "") ||
+      TRENDING_HOLLYWOOD_RE.test(item.title || ""),
   },
 ];
 
 const CATEGORY_RULES = [
+  [TRENDING_HOLLYWOOD_RE, "hollywood"],
   [/box office|collection day|crore|opening day|weekend collection/i, "box-office"],
   [/\bott\b|streaming|netflix|prime video|hotstar|jiocinema|zee5|sonyliv/i, "ott-releases"],
   [/wedding|engage|dating|relationship|breakup|divorce|marries|married|boyfriend|girlfriend/i, "relationships"],
@@ -281,6 +288,7 @@ const OPENERS = {
   relationships: "Here's the latest relationship update doing the rounds:",
   fashion: "Here's the latest fashion moment turning heads:",
   "bollywood-news": "Here's the latest update from the Bollywood world:",
+  hollywood: "Here's the latest update from the Hollywood/Marvel world:",
 };
 
 function rephraseArticle(paragraphs, category, title) {
@@ -647,6 +655,7 @@ ${jsonLd ? `<script type="application/ld+json">${jsonLd}</script>` : ""}
     <a href="${prefix}category/ott-releases/">OTT</a>
     <a href="${prefix}category/relationships/">Relationships</a>
     <a href="${prefix}category/fashion/">Fashion</a>
+    <a href="${prefix}category/hollywood/">Hollywood</a>
   </nav>
 </header>
 <main>

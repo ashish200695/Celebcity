@@ -44,6 +44,7 @@ const HASHTAGS_BY_CATEGORY = {
   relationships: ["#BollywoodCouple", "#CelebRelationship", "#BollywoodShaadi", "#CelebLove"],
   fashion: ["#BollywoodFashion", "#CelebStyle", "#RedCarpetLook", "#EthnicWear", "#FashionPolice"],
   "bollywood-news": ["#CelebCity", "#BollywoodUpdate", "#HindiCinema"],
+  hollywood: ["#Marvel", "#SpiderMan", "#Avengers", "#Hollywood", "#HollywoodNews"],
 };
 
 const CATEGORY_EMOJI = {
@@ -52,6 +53,7 @@ const CATEGORY_EMOJI = {
   relationships: "💔",
   fashion: "👗",
   "bollywood-news": "🎬",
+  hollywood: "🕷️",
 };
 
 const ANNOTATION_PREFIX_RE = /^(EXCLUSIVE|WATCH|BREAKING|VIRAL|OMG|WOW)\s*[:\-]?\s*/i;
