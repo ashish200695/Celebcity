@@ -117,6 +117,13 @@ const TRENDING_RSS_URL = "https://trends.google.com/trending/rss?geo=IN";
 const TRENDING_EXCLUDE_RE =
   /\b(football|soccer|cricket|hockey|badminton|tennis|manchester united|manchester city|real madrid|barcelona|premier league|la liga|ipl\b|bcci|olympics|f1\b|formula 1|nba|nfl|wimbledon|wrestling|wwe)\b|electronics|smartphone|laptop|processor|chipset|gadget|camera\b|image sensor|iphone|samsung galaxy|macbook|graphics card/i;
 
+// Trending titles are sometimes in Hindi/regional-script (Devanagari etc.) when the underlying
+// news source is a Hindi-language outlet. The social/OG image overlay renders text as Arial via
+// an SVG->sharp raster pipeline (buildOverlaySvg), which has no Devanagari glyphs — the title
+// comes out as unreadable boxes. Site copy is English-only by design, so skip these outright
+// rather than trying to ship a second font just for a handful of trending items.
+const NON_LATIN_SCRIPT_RE = /[ऀ-ॿঀ-৿਀-੿઀-૿଀-୿஀-௿ఀ-౿ಀ-೿ഀ-ൿ]/;
+
 async function fetchTrendingTopics() {
   try {
     const res = await fetch(TRENDING_RSS_URL, {
@@ -137,6 +144,7 @@ async function fetchTrendingTopics() {
       if (!title || !url) continue;
       const decodedTitle = cleanTitle(decodeXmlEntities(title));
       if (TRENDING_EXCLUDE_RE.test(decodedTitle)) continue;
+      if (NON_LATIN_SCRIPT_RE.test(decodedTitle)) continue;
       items.push({
         title: decodedTitle,
         link: url.trim(),
@@ -1019,7 +1027,13 @@ async function main() {
   // Self-healing: drop any excluded trending topics every run, regardless of how they got
   // into posts.json (concurrent-commit git merges can resurrect deleted array entries, so
   // filtering only at fetch-time isn't enough — this re-applies on the full dataset each time).
-  merged = merged.filter((p) => !(p.category === "trending" && TRENDING_EXCLUDE_RE.test(p.title)));
+  merged = merged.filter(
+    (p) =>
+      !(
+        p.category === "trending" &&
+        (TRENDING_EXCLUDE_RE.test(p.title) || NON_LATIN_SCRIPT_RE.test(p.title))
+      )
+  );
   merged.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
   if (merged.length > MAX_TOTAL_POSTS) merged = merged.slice(0, MAX_TOTAL_POSTS);
 
