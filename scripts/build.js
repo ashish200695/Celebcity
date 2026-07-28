@@ -276,7 +276,12 @@ function extractArticleParagraphs(html) {
         text.length > 45 &&
         !/subscribe|cookie|advertisement|all rights reserved|preferred source|also read|catch us for|continue with google|log in with|sign up|newsletter|follow us on|download the app|click here|e-paper|entertainment desk|team of journalists|red carpet goes unrolled|insider insights|dynamic and dedicated|disclaimer:|end of article/i.test(
           text
-        )
+        ) &&
+        // Real prose has common lowercase function words (the, and, of...) sprinkled
+        // throughout; nav menus / link dumps (common on US news sites with different markup
+        // than the Indian entertainment sites this scraper was built against) are long runs
+        // of Title Case labels ("The Big Number", "NBA Finals") that lack them.
+        !(text.length > 100 && (text.match(/\b(the|and|of|to|in|a|is|was|with|for|that|this)\b/g) || []).length < 3)
     );
 
   return paragraphs.slice(0, 8);
