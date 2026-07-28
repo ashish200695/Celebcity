@@ -106,22 +106,17 @@ function cleanTitle(title) {
   return title ? title.replace(/\s+/g, " ").trim() : title;
 }
 
-// Google Trends' free "Daily Search Trends" RSS for India — naturally capped to ~10 items,
+// Google Trends' free "Daily Search Trends" RSS for the USA — naturally capped to ~10 items,
 // which is exactly the "most trending only, not everything" behavior we want. Each trend
 // links to real news articles via nested <ht:news_item> blocks, which we parse manually
 // since they're repeating custom-namespace elements rss-parser doesn't expose by default.
-const TRENDING_RSS_URL = "https://trends.google.com/trending/rss?geo=IN";
+// Deliberately unfiltered by topic (politics/sports/business/entertainment all included) —
+// this tab is "what's trending in the USA right now," not a celeb-only feed.
+const TRENDING_RSS_URL = "https://trends.google.com/trending/rss?geo=US";
 
-// Google Trends' India feed pulls in genuinely-trending but off-topic noise for a celeb/
-// entertainment audience (sports scores, gadget launches) — filter those out.
-const TRENDING_EXCLUDE_RE =
-  /\b(football|soccer|cricket|hockey|badminton|tennis|manchester united|manchester city|real madrid|barcelona|premier league|la liga|ipl\b|bcci|olympics|f1\b|formula 1|nba|nfl|wimbledon|wrestling|wwe)\b|electronics|smartphone|laptop|processor|chipset|gadget|camera\b|image sensor|iphone|samsung galaxy|macbook|graphics card/i;
-
-// Trending titles are sometimes in Hindi/regional-script (Devanagari etc.) when the underlying
-// news source is a Hindi-language outlet. The social/OG image overlay renders text as Arial via
-// an SVG->sharp raster pipeline (buildOverlaySvg), which has no Devanagari glyphs — the title
-// comes out as unreadable boxes. Site copy is English-only by design, so skip these outright
-// rather than trying to ship a second font just for a handful of trending items.
+// US trends are already English, but keep this as a safety net in case a source article
+// title comes through in another script — the social/OG image overlay renders text as Arial
+// via an SVG->sharp raster pipeline with no non-Latin glyphs, so it'd render as unreadable boxes.
 const NON_LATIN_SCRIPT_RE = /[ऀ-ॿঀ-৿਀-੿઀-૿଀-୿஀-௿ఀ-౿ಀ-೿ഀ-ൿ]/;
 
 async function fetchTrendingTopics() {
@@ -143,7 +138,6 @@ async function fetchTrendingTopics() {
       const source = (newsBlock.match(/<ht:news_item_source>([\s\S]*?)<\/ht:news_item_source>/) || [])[1];
       if (!title || !url) continue;
       const decodedTitle = cleanTitle(decodeXmlEntities(title));
-      if (TRENDING_EXCLUDE_RE.test(decodedTitle)) continue;
       if (NON_LATIN_SCRIPT_RE.test(decodedTitle)) continue;
       items.push({
         title: decodedTitle,
@@ -354,7 +348,7 @@ const OPENERS = {
   fashion: "Here's the latest fashion moment turning heads:",
   "bollywood-news": "Here's the latest update from the Bollywood world:",
   hollywood: "Here's the latest update from the Hollywood/Marvel world:",
-  trending: "Here's what's trending across India right now:",
+  trending: "Here's what's trending across the USA right now:",
 };
 
 function rephraseArticle(paragraphs, category, title) {
@@ -1027,16 +1021,11 @@ async function main() {
 
   const existing = loadPosts();
   let merged = mergeNewPosts(existing, freshItems);
-  // Self-healing: drop any excluded trending topics every run, regardless of how they got
-  // into posts.json (concurrent-commit git merges can resurrect deleted array entries, so
-  // filtering only at fetch-time isn't enough — this re-applies on the full dataset each time).
-  merged = merged.filter(
-    (p) =>
-      !(
-        p.category === "trending" &&
-        (TRENDING_EXCLUDE_RE.test(p.title) || NON_LATIN_SCRIPT_RE.test(p.title))
-      )
-  );
+  // Self-healing: drop any non-Latin-script trending topics every run, regardless of how
+  // they got into posts.json (concurrent-commit git merges can resurrect deleted array
+  // entries, so filtering only at fetch-time isn't enough — this re-applies on the full
+  // dataset each time).
+  merged = merged.filter((p) => !(p.category === "trending" && NON_LATIN_SCRIPT_RE.test(p.title)));
   merged.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
   if (merged.length > MAX_TOTAL_POSTS) merged = merged.slice(0, MAX_TOTAL_POSTS);
 
