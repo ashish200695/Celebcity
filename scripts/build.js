@@ -1014,6 +1014,7 @@ function renderSite(posts) {
   writeFile("sitemap.xml", buildSitemap(posts, categories));
   writeFile("robots.txt", buildRobotsTxt());
   writeFile("feed.xml", buildRssFeed(posts));
+  writeFile("ads.txt", "google.com, pub-8656000718942351, DIRECT, f08c47fec0942fa0\n");
 
   // CNAME file for GitHub Pages custom domain.
   writeFile("CNAME", "celebcity.in");
