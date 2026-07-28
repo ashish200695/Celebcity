@@ -710,6 +710,8 @@ ${jsonLd ? `<script type="application/ld+json">${jsonLd}</script>` : ""}
   gtag('js', new Date());
   gtag('config', 'G-CPRBD1CCEH');
 </script>
+<!-- Google AdSense -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8656000718942351" crossorigin="anonymous"></script>
 </head>
 <body>
 <header class="site-header">
