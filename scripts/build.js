@@ -106,16 +106,15 @@ function cleanTitle(title) {
   return title ? title.replace(/\s+/g, " ").trim() : title;
 }
 
-// Google Trends' free "Daily Search Trends" RSS for the USA — naturally capped to ~10 items,
+// Google Trends' free "Daily Search Trends" RSS for India — naturally capped to ~10 items,
 // which is exactly the "most trending only, not everything" behavior we want. Each trend
 // links to real news articles via nested <ht:news_item> blocks, which we parse manually
 // since they're repeating custom-namespace elements rss-parser doesn't expose by default.
 // Deliberately unfiltered by topic (politics/sports/business/entertainment all included) —
-// this tab is "what's trending in the USA right now," not a celeb-only feed.
-const TRENDING_RSS_URL = "https://trends.google.com/trending/rss?geo=US";
+// this tab is "what's trending in India right now," not a celeb-only feed.
+const TRENDING_RSS_URL = "https://trends.google.com/trending/rss?geo=IN";
 
-// US trends are already English, but keep this as a safety net in case a source article
-// title comes through in another script — the social/OG image overlay renders text as Arial
+// Some India trends are in Hindi/regional script — the social/OG image overlay renders text as Arial
 // via an SVG->sharp raster pipeline with no non-Latin glyphs, so it'd render as unreadable boxes.
 const NON_LATIN_SCRIPT_RE = /[ऀ-ॿঀ-৿਀-੿઀-૿଀-୿஀-௿ఀ-౿ಀ-೿ഀ-ൿ]/;
 
@@ -353,7 +352,7 @@ const OPENERS = {
   fashion: "Here's the latest fashion moment turning heads:",
   "bollywood-news": "Here's the latest update from the Bollywood world:",
   hollywood: "Here's the latest update from the Hollywood/Marvel world:",
-  trending: "Here's what's trending across the USA right now:",
+  trending: "Here's what's trending across India right now:",
 };
 
 function rephraseArticle(paragraphs, category, title) {
