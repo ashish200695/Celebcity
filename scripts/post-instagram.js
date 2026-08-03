@@ -13,10 +13,13 @@ const GRAPH_VERSION = "v21.0";
 const MAX_ATTEMPTS = 3; // how many candidate posts to try before giving up this run
 const MAX_RETRIES = 3; // how many separate runs a single article gets before being abandoned
 
-// TEMPORARY (set 2026-07-23, per explicit request): photo posts only cover CJP protest news
-// until told to resume normal rotation. Set to null to go back to posting everything as usual.
-// Does NOT affect Reels — those keep pulling from the full article pool unchanged.
-const PHOTO_ONLY_TOPIC_RE = /\bCJP\b|Cockroach Janta Party|Sansad Chalo|Jantar Mantar/i;
+// TEMPORARY (set 2026-07-23, broadened 2026-08-01, per explicit request): photo posts only
+// cover Indian political/protest news (CJP, Modi, opposition, protests) until told to resume
+// normal rotation. Event-driven only — posts when a matching article exists, no fixed
+// schedule. Set to null to go back to posting everything as usual. Does NOT affect Reels —
+// those keep pulling from the full article pool unchanged.
+const PHOTO_ONLY_TOPIC_RE =
+  /\bCJP\b|Cockroach Janta Party|Sansad Chalo|Jantar Mantar|\bModi\b|\bopposition\b|\bprotest(s|ers|ing)?\b|\bagitation\b/i;
 
 // Broad, always-included tags that place us in the biggest relevant Bollywood search pools.
 const BASE_HASHTAGS = [
@@ -166,16 +169,26 @@ function extractEntityHashtags(title) {
   return tags.slice(0, 6);
 }
 
-// Dedicated tag set for CJP coverage — mixing in generic #Bollywood tags on a political
-// protest story would look mismatched/spammy and actively hurt reach, not help it.
-const CJP_HASHTAGS = ["#CJP", "#CJPProtest", "#JantarMantar", "#SansadChalo", "#Delhi", "#IndiaProtest"];
+// Dedicated tag set for Indian political/protest coverage — mixing in generic #Bollywood
+// tags on a political story would look mismatched/spammy and actively hurt reach, not help it.
+const POLITICS_HASHTAGS = [
+  "#CJP",
+  "#CJPProtest",
+  "#JantarMantar",
+  "#SansadChalo",
+  "#Delhi",
+  "#IndiaProtest",
+  "#IndianPolitics",
+  "#Modi",
+  "#Opposition",
+];
 const NEWS_BASE_HASHTAGS = ["#IndiaNews", "#Trending", "#TrendingNow", "#BreakingNews"];
 
 function buildHashtags(post) {
-  const isCjp = PHOTO_ONLY_TOPIC_RE && PHOTO_ONLY_TOPIC_RE.test(post.title);
-  const baseTags = isCjp ? NEWS_BASE_HASHTAGS : BASE_HASHTAGS;
-  const categoryTags = isCjp
-    ? CJP_HASHTAGS
+  const isPolitics = PHOTO_ONLY_TOPIC_RE && PHOTO_ONLY_TOPIC_RE.test(post.title);
+  const baseTags = isPolitics ? NEWS_BASE_HASHTAGS : BASE_HASHTAGS;
+  const categoryTags = isPolitics
+    ? POLITICS_HASHTAGS
     : HASHTAGS_BY_CATEGORY[post.category] || HASHTAGS_BY_CATEGORY["bollywood-news"];
   const entityTags = extractEntityHashtags(post.title);
   const combined = [...baseTags, ...categoryTags, ...entityTags];
@@ -336,7 +349,7 @@ async function main() {
   if (!candidates.length) {
     console.log(
       mode === "photo" && PHOTO_ONLY_TOPIC_RE
-        ? "No eligible CJP articles found this run (photo posting is topic-restricted right now)."
+        ? "No eligible political/protest articles found this run (photo posting is topic-restricted right now)."
         : "No eligible unposted articles found."
     );
     return;
