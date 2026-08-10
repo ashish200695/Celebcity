@@ -729,6 +729,11 @@ ${body}
 </main>
 <footer class="site-footer">
   <p>CelebCity reports on publicly available Bollywood news in its own words. Story tips originate from the credited source noted on each article.</p>
+  <p class="footer-links">
+    <a href="${prefix}about/">About</a> ·
+    <a href="${prefix}privacy/">Privacy Policy</a> ·
+    <a href="${prefix}contact/">Contact</a>
+  </p>
 </footer>
 </body>
 </html>`;
@@ -925,6 +930,13 @@ main{max-width:960px;margin:0 auto;padding:24px;}
 .source-credit a{color:var(--muted);text-decoration:underline;}
 .source-credit a:hover{color:var(--accent);}
 .site-footer{max-width:960px;margin:0 auto;padding:24px;color:var(--muted);font-size:12px;border-top:1px solid #2a2a33;}
+.footer-links{margin-top:10px;}
+.footer-links a{color:var(--muted);text-decoration:underline;}
+.footer-links a:hover{color:var(--accent);}
+.static-page{max-width:720px;margin:0 auto;line-height:1.7;color:#dcdce2;}
+.static-page h1{color:var(--text);font-size:28px;margin-bottom:16px;}
+.static-page h2{color:var(--text);font-size:20px;margin-top:28px;}
+.static-page a{color:var(--accent);}
 `;
 
 function writeFile(relPath, content) {
@@ -936,6 +948,9 @@ function writeFile(relPath, content) {
 function buildSitemap(posts, categories) {
   const urls = [
     { loc: `${SITE_URL}/`, changefreq: "hourly", priority: "1.0" },
+    { loc: `${SITE_URL}/about/`, changefreq: "monthly", priority: "0.3" },
+    { loc: `${SITE_URL}/privacy/`, changefreq: "monthly", priority: "0.3" },
+    { loc: `${SITE_URL}/contact/`, changefreq: "monthly", priority: "0.3" },
     ...categories.map((cat) => ({ loc: `${SITE_URL}/category/${cat}/`, changefreq: "hourly", priority: "0.7" })),
     ...posts
       .filter((p) => p.body !== undefined)
@@ -994,10 +1009,100 @@ async function generateBrandAssets() {
   writeFile("favicon.png", favicon);
 }
 
+const CONTACT_EMAIL = "ashw0605@gmail.com";
+
+function renderAbout() {
+  const prefix = "";
+  const body = `<article class="static-page">
+  <h1>About CelebCity</h1>
+  <p>CelebCity is an automated Bollywood and entertainment news site. We monitor public
+  RSS feeds from established Indian entertainment publishers — including Times of India,
+  Hindustan Times, Bollywood Hungama, and Koimoi — and republish the news in our own words,
+  citing the original source at the bottom of every article.</p>
+  <p>We also track Google Trends' publicly available "Daily Search Trends" data for India to
+  surface what's currently trending, shown in our <a href="${prefix}category/trending/">Trending</a> tab.</p>
+  <h2>Editorial approach</h2>
+  <p>CelebCity does not conduct original reporting. Every article is a rewritten summary of
+  news already reported elsewhere, and we credit the originating publisher on each article
+  page. If you are the publisher of a story we've covered and have a concern, see our
+  <a href="${prefix}contact/">Contact</a> page.</p>
+  <h2>Contact</h2>
+  <p>For questions, corrections, or content concerns, reach us at
+  <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>.</p>
+</article>`;
+  return layout({
+    title: "About — CelebCity",
+    description: "About CelebCity — an automated Bollywood and entertainment news site.",
+    body,
+    canonicalPath: "/about/",
+    prefix,
+  });
+}
+
+function renderPrivacy() {
+  const prefix = "";
+  const body = `<article class="static-page">
+  <h1>Privacy Policy</h1>
+  <p>Last updated: ${new Date().toISOString().slice(0, 10)}</p>
+  <p>This Privacy Policy explains how CelebCity ("we", "us") collects and uses information
+  when you visit celebcity.in (the "Site").</p>
+  <h2>Information we collect</h2>
+  <p>We use Google Analytics to understand how visitors use the Site — such as pages viewed,
+  time spent, and general location — via cookies and similar technologies. We do not
+  separately collect or store any personal information you submit, since the Site has no
+  account system, comments, or forms.</p>
+  <h2>Advertising and cookies</h2>
+  <p>We use Google AdSense to display ads on the Site. Google and its partners may use
+  cookies (including the DoubleClick cookie) to serve ads based on your prior visits to this
+  and other websites. You can opt out of personalized advertising by visiting
+  <a href="https://adssettings.google.com" target="_blank" rel="noopener noreferrer">Google's Ads Settings</a>,
+  or generally at <a href="https://www.aboutads.info" target="_blank" rel="noopener noreferrer">www.aboutads.info</a>.</p>
+  <h2>Third-party links</h2>
+  <p>Articles on this Site link to the original publisher's article as the source. We are not
+  responsible for the content or privacy practices of those external sites.</p>
+  <h2>Children's privacy</h2>
+  <p>This Site is not directed at children under 13, and we do not knowingly collect
+  information from children.</p>
+  <h2>Changes to this policy</h2>
+  <p>We may update this Privacy Policy from time to time. Changes will be posted on this page.</p>
+  <h2>Contact us</h2>
+  <p>Questions about this policy can be sent to
+  <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>.</p>
+</article>`;
+  return layout({
+    title: "Privacy Policy — CelebCity",
+    description: "CelebCity's privacy policy covering cookies, Google Analytics, and Google AdSense.",
+    body,
+    canonicalPath: "/privacy/",
+    prefix,
+  });
+}
+
+function renderContact() {
+  const prefix = "";
+  const body = `<article class="static-page">
+  <h1>Contact</h1>
+  <p>For questions, corrections, content removal requests, or anything else, email us at:</p>
+  <p><a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a></p>
+  <p>If you are a publisher and would like to flag an issue with how we've covered your
+  story, please include the article URL in your email and we'll respond as soon as possible.</p>
+</article>`;
+  return layout({
+    title: "Contact — CelebCity",
+    description: "Contact CelebCity.",
+    body,
+    canonicalPath: "/contact/",
+    prefix,
+  });
+}
+
 function renderSite(posts) {
   fs.rmSync(SITE_DIR, { recursive: true, force: true });
   writeFile("style.css", STYLE_CSS);
   writeFile("index.html", renderHome(posts));
+  writeFile("about/index.html", renderAbout());
+  writeFile("privacy/index.html", renderPrivacy());
+  writeFile("contact/index.html", renderContact());
 
   const categories = ["bollywood-news", "trending", ...CATEGORY_RULES.map(([, cat]) => cat)];
   for (const cat of categories) {
