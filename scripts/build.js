@@ -36,6 +36,14 @@ const REEL_CONCURRENCY = 2;
 // narrow (not "all Hollywood") since these overlap heavily with the Indian audience's interest.
 const TRENDING_HOLLYWOOD_RE = /spider-?man|marvel|avengers|doomsday|the odyssey|\bnolan\b/i;
 
+// Trending tab is dedicated to protest coverage across India — any protest, not limited to
+// a specific movement or figure. Indian-English journalism uses a range of protest-adjacent
+// terms beyond the literal word "protest".
+const PROTEST_RE =
+  /\bprotest(s|ers|ing)?\b|\bagitation\b|\bandolan\b|\bbandh\b|\bdharna\b|\bgherao\b|\bhunger strike\b|\bhunger fast\b|\b(farmers?|students?|workers?)\s+stir\b|\bunrest\b|\bdemonstrat(ion|ors|e)\b|\brioting\b|\bcurfew\b|\blathi.?charge\b|\btear gas\b|\bsit-in\b|\bblockade\b|\brasta roko\b|\brail roko\b|\bmarch(es)?\b.*(demand|protest)|\bstrike call\b/i;
+const FINANCE_EXCLUDE_RE =
+  /\bstock market\b|\bsensex\b|\bnifty\b|\bshares?\b|\bshare price\b|\bq[1-4]\b.*results?|net profit|\brevenue\b|\bipo\b|\bmutual fund\b|\bdividend\b|\bnasdaq\b|\bdow jones\b|\bs&p\b|\bearnings\b|\bebitda\b|futures|\bforex\b|\bgold rate\b/i;
+
 const FEEDS = [
   {
     url: "https://timesofindia.indiatimes.com/rssfeeds/1081479906.cms",
@@ -57,6 +65,21 @@ const FEEDS = [
       (item.categories || []).some((c) => /bollywood/i.test(c)) ||
       /\/bollywood-news\//.test(item.link || "") ||
       TRENDING_HOLLYWOOD_RE.test(item.title || ""),
+  },
+  // General India news feeds, filtered down to protest coverage only — feeds the Trending
+  // tab reliably, since Google Trends' top-10 list alone is too thin to guarantee protest
+  // coverage shows up on any given day.
+  {
+    url: "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
+    siteName: "Hindustan Times",
+    forceCategory: "trending",
+    filterFn: (item) => PROTEST_RE.test(item.title || "") && !FINANCE_EXCLUDE_RE.test(item.title || ""),
+  },
+  {
+    url: "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms",
+    siteName: "Times of India",
+    forceCategory: "trending",
+    filterFn: (item) => PROTEST_RE.test(item.title || "") && !FINANCE_EXCLUDE_RE.test(item.title || ""),
   },
 ];
 
@@ -118,6 +141,7 @@ const TRENDING_RSS_URL = "https://trends.google.com/trending/rss?geo=IN";
 // via an SVG->sharp raster pipeline with no non-Latin glyphs, so it'd render as unreadable boxes.
 const NON_LATIN_SCRIPT_RE = /[ऀ-ॿঀ-৿਀-੿઀-૿଀-୿஀-௿ఀ-౿ಀ-೿ഀ-ൿ]/;
 
+
 async function fetchTrendingTopics() {
   try {
     const res = await fetch(TRENDING_RSS_URL, {
@@ -138,6 +162,7 @@ async function fetchTrendingTopics() {
       if (!title || !url) continue;
       const decodedTitle = cleanTitle(decodeXmlEntities(title));
       if (NON_LATIN_SCRIPT_RE.test(decodedTitle)) continue;
+      if (!PROTEST_RE.test(decodedTitle) || FINANCE_EXCLUDE_RE.test(decodedTitle)) continue;
       items.push({
         title: decodedTitle,
         link: url.trim(),
@@ -177,7 +202,7 @@ async function fetchAllFeeds() {
           link: (item.link || "").trim(),
           pubDate: (item.pubDate || new Date().toISOString()).trim(),
           sourceName: feed.siteName,
-          category: categorize(title),
+          category: feed.forceCategory || categorize(title),
         });
       }
     } catch (err) {
@@ -352,7 +377,7 @@ const OPENERS = {
   fashion: "Here's the latest fashion moment turning heads:",
   "bollywood-news": "Here's the latest update from the Bollywood world:",
   hollywood: "Here's the latest update from the Hollywood/Marvel world:",
-  trending: "Here's what's trending across India right now:",
+  trending: "Here's the latest protest news from across India:",
 };
 
 function rephraseArticle(paragraphs, category, title) {
@@ -1130,11 +1155,17 @@ async function main() {
 
   const existing = loadPosts();
   let merged = mergeNewPosts(existing, freshItems);
-  // Self-healing: drop any non-Latin-script trending topics every run, regardless of how
-  // they got into posts.json (concurrent-commit git merges can resurrect deleted array
-  // entries, so filtering only at fetch-time isn't enough — this re-applies on the full
-  // dataset each time).
-  merged = merged.filter((p) => !(p.category === "trending" && NON_LATIN_SCRIPT_RE.test(p.title)));
+  // Self-healing: drop any non-Latin-script or off-topic (non-protest, or finance/stock)
+  // trending entries every run, regardless of how they got into posts.json (concurrent-commit
+  // git merges can resurrect deleted array entries, so filtering only at fetch-time isn't
+  // enough — this re-applies on the full dataset each time).
+  merged = merged.filter(
+    (p) =>
+      !(
+        p.category === "trending" &&
+        (NON_LATIN_SCRIPT_RE.test(p.title) || !PROTEST_RE.test(p.title) || FINANCE_EXCLUDE_RE.test(p.title))
+      )
+  );
   merged.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
   if (merged.length > MAX_TOTAL_POSTS) merged = merged.slice(0, MAX_TOTAL_POSTS);
 
