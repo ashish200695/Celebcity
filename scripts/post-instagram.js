@@ -13,13 +13,9 @@ const GRAPH_VERSION = "v21.0";
 const MAX_ATTEMPTS = 3; // how many candidate posts to try before giving up this run
 const MAX_RETRIES = 3; // how many separate runs a single article gets before being abandoned
 
-// TEMPORARY (set 2026-07-23, broadened 2026-08-01, per explicit request): photo posts only
-// cover Indian political/protest news (CJP, Modi, opposition, protests) until told to resume
-// normal rotation. Event-driven only — posts when a matching article exists, no fixed
-// schedule. Set to null to go back to posting everything as usual. Does NOT affect Reels —
-// those keep pulling from the full article pool unchanged.
-const PHOTO_ONLY_TOPIC_RE =
-  /\bCJP\b|Cockroach Janta Party|Sansad Chalo|Jantar Mantar|\bModi\b|\bopposition\b|\bprotest(s|ers|ing)?\b|\bagitation\b/i;
+// Political/protest-only photo restriction was active 2026-07-23 to 2026-08-13, then lifted
+// per explicit request — photos are back to celeb-only rotation (same pool as Reels).
+const PHOTO_ONLY_TOPIC_RE = null;
 
 // Broad, always-included tags that place us in the biggest relevant Bollywood search pools.
 const BASE_HASHTAGS = [
@@ -337,8 +333,15 @@ async function main() {
   // Retry transient failures (e.g. "media not ready yet") up to MAX_RETRIES times across
   // separate runs before giving up on an article for good — a single failure is very often
   // just a slow Instagram processing queue, not a real problem with that article.
+  // Instagram is celeb-only — the "trending" category (protest/political news) is a
+  // website-only feature, never posted to Instagram (photo or Reel).
   const eligible = posts.filter(
-    (p) => p.body && p.imageUrl && !p.igPostedAt && (p.igPostAttempts || 0) < MAX_RETRIES
+    (p) =>
+      p.body &&
+      p.imageUrl &&
+      !p.igPostedAt &&
+      (p.igPostAttempts || 0) < MAX_RETRIES &&
+      p.category !== "trending"
   );
   let modeEligible = mode === "reel" ? eligible.filter((p) => p.reelGeneratedAt) : eligible;
   if (mode === "photo" && PHOTO_ONLY_TOPIC_RE) {
