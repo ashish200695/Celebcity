@@ -585,7 +585,7 @@ async function generateSocialImages(posts) {
 let ffmpegAvailable = null;
 function checkFfmpegAvailable() {
   if (ffmpegAvailable !== null) return ffmpegAvailable;
-  const result = spawnSync("ffmpeg", ["-version"], { stdio: "ignore" });
+  const result = spawnSync("ffmpeg", ["-version"], { stdio: "ignore", timeout: 10000 });
   ffmpegAvailable = !result.error;
   if (!ffmpegAvailable) console.warn("ffmpeg not found — skipping Reel video generation.");
   return ffmpegAvailable;
@@ -666,10 +666,14 @@ async function generateReelVideo(post) {
     outputPath,
   ];
 
-  const result = spawnSync("ffmpeg", args, { encoding: "utf-8" });
+  // Without a timeout, a hung ffmpeg process (bad input, resource contention, etc.) blocks
+  // the entire build indefinitely — this once stalled a run for 50+ minutes with zero output.
+  const result = spawnSync("ffmpeg", args, { encoding: "utf-8", timeout: 90000 });
   let videoBuffer = null;
   if (result.status === 0 && fs.existsSync(outputPath)) {
     videoBuffer = fs.readFileSync(outputPath);
+  } else if (result.signal) {
+    console.error(`ffmpeg timed out for "${post.title}" (signal: ${result.signal})`);
   } else {
     console.error(`ffmpeg failed for "${post.title}":`, (result.stderr || "").slice(-800));
   }
