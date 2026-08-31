@@ -680,7 +680,12 @@ async function generateReelVideo(post) {
 
 async function generateReels(posts) {
   if (!checkFfmpegAvailable()) return;
-  const candidates = posts.filter((p) => p.body && p.imageUrl && !p.igPostedAt).slice(0, REEL_LIMIT);
+  // Reels are Instagram-only (never shown on the site), and Instagram is celeb-only — so
+  // "trending" articles would just waste a generation slot and crowd real candidates out of
+  // this limited window before Instagram gets to them. Exclude them here.
+  const candidates = posts
+    .filter((p) => p.body && p.imageUrl && !p.igPostedAt && p.category !== "trending")
+    .slice(0, REEL_LIMIT);
   if (!candidates.length) return;
   console.log(`Generating ${candidates.length} Reel videos...`);
 
