@@ -2,8 +2,10 @@ name: Post photo to Instagram (hourly)
 
 on:
   schedule:
-    # Every hour, 10am-10pm IST (04:30-16:30 UTC). Silent 10pm-10am IST.
-    - cron: "30 4-16 * * *"
+    # Every hour, 10am-10pm IST (04:42-16:42 UTC). Silent 10pm-10am IST.
+    # Offset to :42 (not :00 or :30) — round-number minutes see the heaviest GitHub Actions
+    # scheduling congestion, where queued runs can be silently dropped under load.
+    - cron: "42 4-16 * * *"
   workflow_dispatch: {} # lets you trigger a manual post from the Actions tab
 
 permissions:

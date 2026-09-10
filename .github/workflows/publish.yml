@@ -2,8 +2,9 @@ name: Build and publish CelebCity
 
 on:
   schedule:
-    # Runs every 3 hours. GitHub may delay this slightly under load — that's normal for free scheduled runs.
-    - cron: "0 */3 * * *"
+    # Runs every 3 hours, offset to :27 (not :00) since round-number minutes see the heaviest
+    # GitHub Actions scheduling congestion and can have queued runs silently dropped under load.
+    - cron: "27 */3 * * *"
   workflow_dispatch: {} # lets you trigger a manual run from the Actions tab
   push:
     branches: [main]
